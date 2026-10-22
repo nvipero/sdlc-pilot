@@ -147,6 +147,7 @@ workspace_report() {
     if ! git rev-parse --git-dir >/dev/null 2>&1; then
       echo "  no usable git repository; top-level entries:"; ls -A | sed "s/^/    /"; exit 0
     fi
+    echo "  current HEAD: $(git symbolic-ref -q --short HEAD || echo detached) at $(git rev-parse -q --verify --short HEAD || echo "no commits (orphan or unborn branch)")"
     echo "  local branches (upstream and ahead/behind as of the last fetch):"
     git for-each-ref --format="    %(refname:short) %(upstream:short) %(upstream:track)" refs/heads
     echo "  commits on no remote branch (as of the last fetch):"
