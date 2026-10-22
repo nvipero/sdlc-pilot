@@ -6,6 +6,11 @@ set -euo pipefail
 
 log() { echo "init-workspace: $*" >&2; }
 
+# The entrypoint starts the firewall; wait for it (it can take a few seconds).
+for _ in $(seq 1 60); do
+  [ -f /run/firewall-ok ] && break
+  sleep 1
+done
 [ -f /run/firewall-ok ] || { log "firewall is not active"; exit 1; }
 [ -n "${GH_TOKEN:-}" ] || { log "GH_TOKEN is not set (start with scripts/up.sh)"; exit 1; }
 
@@ -25,4 +30,8 @@ if [ ! -d .git ]; then
   git fetch -q origin main
   git checkout -q -B main --track origin/main
 fi
+# The overlays follow the owner's main, which can be ahead of this clone. New
+# files there would show as untracked and could be staged by `git add -A`.
+# Rewritten on every start.
+printf '%s\n' /.factory/ /.claude/ /.github/ /.devcontainer/ /CLAUDE.md > .git/info/exclude
 log "OK: $(git rev-parse --abbrev-ref HEAD) at $(git rev-parse --short HEAD)"
