@@ -113,14 +113,16 @@ start_container() {
   check_image_label "$CID"
 }
 
-# --- 6. Network probe before handing over -----------------------------------
+# --- 6. Probe before handing over -------------------------------------------
 probe_network() {
   devcontainer exec --workspace-folder "$REPO_DIR" bash -c '
     test -f /run/firewall-ok || { echo "firewall marker missing" >&2; exit 1; }
+    jq -e .permissions.deny /etc/claude-code/managed-settings.json >/dev/null \
+      || { echo "managed settings not readable by the agent user" >&2; exit 1; }
     if curl -s --max-time 5 -o /dev/null https://example.com; then echo "example.com reachable" >&2; exit 1; fi
     curl -fsS --max-time 10 -o /dev/null https://api.github.com/zen || { echo "api.github.com unreachable" >&2; exit 1; }
-  ' >&2 || { stop_container; die "network probe failed"; }
-  say "network probe OK"
+  ' >&2 || { stop_container; die "container probe failed"; }
+  say "container probe OK (firewall, network, managed settings)"
 }
 
 main() {
