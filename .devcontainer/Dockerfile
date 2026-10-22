@@ -37,7 +37,10 @@ RUN curl -fsSL https://downloads.claude.ai/keys/claude-code.asc -o /etc/apt/keyr
  && apt-mark hold claude-code \
  && rm -rf /var/lib/apt/lists/*
 
-# Policy files: root-owned, read-only for the node user.
+# Policy files: root-owned, read-only for the node user. The directories are
+# created first: COPY --chmod would otherwise give them mode 0644 as well,
+# and Claude Code would skip unreadable managed settings.
+RUN install -d -m 0755 /etc/claude-code /etc/factory
 COPY --chmod=0644 managed-settings.json /etc/claude-code/managed-settings.json
 COPY --chmod=0644 allowlist.txt /etc/factory/allowlist.txt
 COPY --chmod=0755 init-firewall.sh init-workspace.sh /usr/local/bin/
