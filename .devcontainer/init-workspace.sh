@@ -32,6 +32,8 @@ if [ ! -d .git ]; then
 fi
 # The overlays follow the owner's main, which can be ahead of this clone. New
 # files there would show as untracked and could be staged by `git add -A`.
-# Rewritten on every start.
-printf '%s\n' /.factory/ /.claude/ /.github/ /.devcontainer/ /CLAUDE.md > .git/info/exclude
+# Missing entries are added on every start; other entries are kept.
+for p in /.factory/ /.claude/ /.github/ /.devcontainer/ /CLAUDE.md; do
+  grep -qxF "$p" .git/info/exclude 2>/dev/null || echo "$p" >> .git/info/exclude
+done
 log "OK: $(git rev-parse --abbrev-ref HEAD) at $(git rev-parse --short HEAD)"

@@ -22,8 +22,9 @@
     "source=${localWorkspaceFolderBasename}-claude,target=/home/node/.claude,type=volume"
   ],
   "capAdd": ["NET_ADMIN", "NET_RAW"],
-  // Firewall marker lives on tmpfs so it never survives a restart; never restart automatically.
-  "runArgs": ["--tmpfs", "/run:rw,nosuid,nodev,noexec,mode=0755", "--restart", "no"],
+  // Firewall marker lives on tmpfs so it never survives a restart; never restart automatically;
+  // an init process as PID 1 so docker stop's SIGTERM reaches the container processes.
+  "runArgs": ["--tmpfs", "/run:rw,nosuid,nodev,noexec,mode=0755", "--restart", "no", "--init"],
   // Keep the image's entrypoint, which brings the firewall up on every start.
   "overrideCommand": false,
   "containerUser": "node",
