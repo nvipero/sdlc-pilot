@@ -9,6 +9,9 @@
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# Bash has already read this file, so a version pulled in by sync_clone would
+# only take effect on the next run. main re-executes itself when that happens.
+SELF_HASH="$(git hash-object "$REPO_DIR/scripts/up.sh")"
 PROJECT="$(basename "$REPO_DIR")"
 TOKEN_REF="${FACTORY_TOKEN_REF:-op://Agent Factory/${PROJECT}-github/credential}"
 EXPECTED_VISIBILITY="${FACTORY_EXPECTED_VISIBILITY:-PUBLIC}"
@@ -111,17 +114,16 @@ start_container() {
   CID="$(container_id)"
   [ -n "$CID" ] || die "container not found after start"
   check_image_label "$CID"
+  [ "$(docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' "$CID")" = "no" ] \
+    || { stop_container; die "container restart policy is not 'no'"; }
 }
 
 # --- 6. Probe before handing over -------------------------------------------
+# factory-exec (in the image) checks the tmpfs firewall marker, managed
+# settings and the network before running anything; every exec goes through it.
 probe_network() {
-  devcontainer exec --workspace-folder "$REPO_DIR" bash -c '
-    test -f /run/firewall-ok || { echo "firewall marker missing" >&2; exit 1; }
-    jq -e .permissions.deny /etc/claude-code/managed-settings.json >/dev/null \
-      || { echo "managed settings not readable by the agent user" >&2; exit 1; }
-    if curl -s --max-time 5 -o /dev/null https://example.com; then echo "example.com reachable" >&2; exit 1; fi
-    curl -fsS --max-time 10 -o /dev/null https://api.github.com/zen || { echo "api.github.com unreachable" >&2; exit 1; }
-  ' >&2 || { stop_container; die "container probe failed"; }
+  devcontainer exec --workspace-folder "$REPO_DIR" /usr/local/bin/factory-exec true >&2 \
+    || { stop_container; die "container probe failed"; }
   say "container probe OK (firewall, network, managed settings)"
 }
 
@@ -132,14 +134,16 @@ main() {
   done
   preflight
   sync_clone
+  if [ "$(git hash-object "$REPO_DIR/scripts/up.sh")" != "$SELF_HASH" ]; then
+    [ -z "${FACTORY_UP_REEXEC:-}" ] || die "up.sh changed again after re-exec"
+    say "up.sh changed on main; restarting with the new version"
+    FACTORY_UP_REEXEC=1 exec "$REPO_DIR/scripts/up.sh" "$@"
+  fi
   read_token
   build_image "$REPO_DIR"
   start_container
   probe_network
-  if [ "$#" -gt 0 ]; then
-    exec devcontainer exec --workspace-folder "$REPO_DIR" "$@"
-  fi
-  exec devcontainer exec --workspace-folder "$REPO_DIR" bash -l
+  exec devcontainer exec --workspace-folder "$REPO_DIR" /usr/local/bin/factory-exec "$@"
 }
 
 # Allow the exit check to source the functions without running main.
