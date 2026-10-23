@@ -28,7 +28,9 @@ The owner chose an undo window of about 5 seconds and no confirmation (owner, an
 - Undo, which puts the task back as it was.
 - Permanent removal after the undo window ends, or when the page is closed or reloaded during the window.
 - Keeping a removed task removed across page reloads and browser sessions.
-- Moving focus on purpose after a removal and after an undo.
+- Moving focus on purpose after a removal and after an undo. When the message disappears without Undo, focus moves to
+  the heading of the swimlane the task was removed from only if focus was on the Undo action; focus elsewhere is not
+  moved.
 
 ## Out of scope
 
@@ -55,7 +57,8 @@ The owner chose an undo window of about 5 seconds and no confirmation (owner, an
   removed from, with the same title and status, at the same position among the tasks of that swimlane, and the message
   disappears.
 - AC-6: If the user does not activate Undo, the message and its Undo action disappear 5 seconds after the removal, and
-  the task does not appear in any swimlane.
+  the task does not appear in any swimlane. The 5 seconds run without pause, also while the Undo action has keyboard
+  focus or the pointer is over it.
 - AC-7: After the undo window has ended, the removed task does not appear in any swimlane after a page reload, or after
   the browser is closed and the app is opened again.
 - AC-8: If the page is reloaded or closed while the Undo action is still offered, the task is removed for good: after
@@ -66,8 +69,9 @@ The owner chose an undo window of about 5 seconds and no confirmation (owner, an
 - AC-11: The message is announced to assistive technology when it appears (for example as a status message), so a
   screen reader user learns that the task was removed.
 - AC-12: After a task is removed with its remove action, keyboard focus is on the Undo action in the message. After Undo
-  is activated, keyboard focus is on the restored task's remove action. After the message disappears without Undo,
-  focus is not lost to the page: it is on the swimlane the task was removed from.
+  is activated, keyboard focus is on the restored task's remove action. If focus is on the Undo action when the message
+  disappears without Undo, focus moves to the heading of the swimlane the task was removed from (the heading that shows
+  the swimlane's status, Todo, Doing or Done). If focus is elsewhere when the message disappears, it does not move.
 
 ## Assumptions
 
@@ -87,8 +91,18 @@ The owner chose an undo window of about 5 seconds and no confirmation (owner, an
   alone is not enough if users do not notice the outcome, so it must be made obvious with feedback, standard:
   https://github.com/MicrosoftDocs/win32/blob/docs/desktop-src/uxguide/mess-confirm.md, read 2026-10-23)
 - Focus is moved on purpose after removal (AC-12). (why it is safe: when a deletion removes the focused item, focus
-  should be set on purpose, for example on a stable parent such as the list, standard:
-  https://primer.style/product/scenario-patterns/delete/, read 2026-10-23)
+  should be set on purpose, not left to fall back to the page, and a stable parent is a suitable target, standard:
+  https://primer.style/product/scenario-patterns/delete/, read 2026-10-23, as recorded in
+  `docs/research/29-task-removal-safeguard.md`; the swimlane heading is the stable parent chosen here)
+- Each swimlane shows a heading with its status (Todo, Doing or Done), and that heading can receive focus when AC-12
+  moves focus to it. (why it is safe: a swimlane shows the tasks of one status, context: Purpose, so naming the status
+  is expected; it gives AC-12 a single, testable focus target)
+- Focus is moved to the swimlane heading only when it is still on the Undo action; focus the user moved elsewhere
+  during the 5 seconds, for example into the add-task field, is left alone. (why it is safe: moving focus
+  unconditionally would take it away from where the user is working)
+- The 5-second undo window is fixed and does not pause on focus or hover (AC-6). (why it is safe: AC-12 puts focus on
+  Undo right after every removal, so pausing on focus would stop the window from ending unless the user moved focus
+  away; the owner chose a short window)
 - The remove action's accessible name includes the task's title (AC-1). (why it is safe: it lets a test and a screen
   reader user tell the remove actions of different tasks apart; it does not change what the user can do)
 
