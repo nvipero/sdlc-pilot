@@ -30,12 +30,12 @@ async function expectCounts(page: Page, counts: Record<Status, number>) {
   for (const s of STATUSES) await expect(tasksIn(page, s)).toHaveCount(counts[s]);
 }
 
-test('AC-1: with no stored tasks, three empty swimlanes Todo, Doing and Done are shown', async ({ page }) => {
+test('AC-1: with no stored tasks, three empty swimlanes Todo, Doing and Done are shown', { tag: '@issue-28-ac-1' }, async ({ page }) => {
   for (const s of STATUSES) await expect(lane(page, s)).toBeVisible();
   await expectCounts(page, { Todo: 0, Doing: 0, Done: 0 });
 });
 
-test('AC-2: all three swimlanes stay shown when some contain no tasks', async ({ page }) => {
+test('AC-2: all three swimlanes stay shown when some contain no tasks', { tag: '@issue-28-ac-2' }, async ({ page }) => {
   await addTask(page, 'Only task');
   await expect(taskIn(page, 'Todo', 'Only task')).toHaveCount(1);
   for (const s of STATUSES) await expect(lane(page, s)).toBeVisible();
@@ -44,14 +44,14 @@ test('AC-2: all three swimlanes stay shown when some contain no tasks', async ({
   for (const s of STATUSES) await expect(lane(page, s)).toBeVisible();
 });
 
-test('AC-3: an added task appears in the Todo swimlane and in no other', async ({ page }) => {
+test('AC-3: an added task appears in the Todo swimlane and in no other', { tag: '@issue-28-ac-3' }, async ({ page }) => {
   await addTask(page, 'Write report');
   await expect(taskIn(page, 'Todo', 'Write report')).toHaveCount(1);
   await expect(taskIn(page, 'Doing', 'Write report')).toHaveCount(0);
   await expect(taskIn(page, 'Done', 'Write report')).toHaveCount(0);
 });
 
-test('AC-4: adding a task leaves the tasks already shown in their swimlanes', async ({ page }) => {
+test('AC-4: adding a task leaves the tasks already shown in their swimlanes', { tag: '@issue-28-ac-4' }, async ({ page }) => {
   await addTask(page, 'First');
   await addTask(page, 'Second');
   await moveTask(page, 'Todo', 'First', 'Doing');
@@ -63,7 +63,7 @@ test('AC-4: adding a task leaves the tasks already shown in their swimlanes', as
   await expectCounts(page, { Todo: 1, Doing: 1, Done: 1 });
 });
 
-test('AC-5: an empty or whitespace-only title adds no task and changes nothing', async ({ page }) => {
+test('AC-5: an empty or whitespace-only title adds no task and changes nothing', { tag: '@issue-28-ac-5' }, async ({ page }) => {
   await addTask(page, 'Existing');
   await expectCounts(page, { Todo: 1, Doing: 0, Done: 0 });
   await addTask(page, '');
@@ -73,12 +73,12 @@ test('AC-5: an empty or whitespace-only title adds no task and changes nothing',
   await expect(taskIn(page, 'Todo', 'Existing')).toHaveCount(1);
 });
 
-test('AC-5: an empty title on an empty view adds no task', async ({ page }) => {
+test('AC-5: an empty title on an empty view adds no task', { tag: '@issue-28-ac-5' }, async ({ page }) => {
   await addTask(page, '   ');
   await expectCounts(page, { Todo: 0, Doing: 0, Done: 0 });
 });
 
-test('AC-6: leading and trailing whitespace is not part of the shown title', async ({ page }) => {
+test('AC-6: leading and trailing whitespace is not part of the shown title', { tag: '@issue-28-ac-6' }, async ({ page }) => {
   await addTask(page, '  Buy milk  ');
   const task = tasksIn(page, 'Todo');
   const expectTrimmed = async () => {
@@ -94,7 +94,7 @@ test('AC-6: leading and trailing whitespace is not part of the shown title', asy
   await expectTrimmed();
 });
 
-test('AC-7: two tasks with the same title are both added as separate tasks', async ({ page }) => {
+test('AC-7: two tasks with the same title are both added as separate tasks', { tag: '@issue-28-ac-7' }, async ({ page }) => {
   await addTask(page, 'Same');
   await addTask(page, 'Same');
   await expect(taskIn(page, 'Todo', 'Same')).toHaveCount(2);
@@ -103,7 +103,7 @@ test('AC-7: two tasks with the same title are both added as separate tasks', asy
 
 for (const from of STATUSES) {
   for (const to of STATUSES.filter((s) => s !== from)) {
-    test(`AC-8: a task in ${from} can be moved to ${to} and leaves ${from}`, async ({ page }) => {
+    test(`AC-8: a task in ${from} can be moved to ${to} and leaves ${from}`, { tag: '@issue-28-ac-8' }, async ({ page }) => {
       await addTask(page, 'Mover');
       if (from !== 'Todo') await moveTask(page, 'Todo', 'Mover', from);
       await expect(taskIn(page, from, 'Mover')).toHaveCount(1);
@@ -116,7 +116,7 @@ for (const from of STATUSES) {
   }
 }
 
-test('AC-9: moving one task does not change any other task, including one with the same title', async ({ page }) => {
+test('AC-9: moving one task does not change any other task, including one with the same title', { tag: '@issue-28-ac-9' }, async ({ page }) => {
   await addTask(page, 'Twin');
   await addTask(page, 'Twin');
   await addTask(page, 'Other');
@@ -128,7 +128,7 @@ test('AC-9: moving one task does not change any other task, including one with t
   await expect(taskIn(page, 'Doing', 'Other')).toHaveCount(1);
 });
 
-test('AC-10: a task can be moved repeatedly forward and backward', async ({ page }) => {
+test('AC-10: a task can be moved repeatedly forward and backward', { tag: '@issue-28-ac-10' }, async ({ page }) => {
   await addTask(page, 'Traveller');
   const path: Array<[Status, Status]> = [
     ['Todo', 'Done'],
@@ -143,7 +143,7 @@ test('AC-10: a task can be moved repeatedly forward and backward', async ({ page
   }
 });
 
-test('AC-11: after a reload every task is shown with its title and latest status', async ({ page }) => {
+test('AC-11: after a reload every task is shown with its title and latest status', { tag: '@issue-28-ac-11' }, async ({ page }) => {
   await addTask(page, 'Alpha plan');
   await addTask(page, 'Bravo plan');
   await addTask(page, 'Charlie plan');
@@ -158,7 +158,7 @@ test('AC-11: after a reload every task is shown with its title and latest status
   await expect(taskIn(page, 'Doing', 'Charlie plan')).toHaveCount(1);
 });
 
-test('AC-12: after a reload no extra task appears and none appears twice', async ({ page }) => {
+test('AC-12: after a reload no extra task appears and none appears twice', { tag: '@issue-28-ac-12' }, async ({ page }) => {
   await addTask(page, 'Solo');
   await addTask(page, 'Solo');
   await addTask(page, 'Other');
@@ -169,7 +169,7 @@ test('AC-12: after a reload no extra task appears and none appears twice', async
   await expectCounts(page, { Todo: 2, Doing: 0, Done: 1 });
 });
 
-test('AC-12: after a reload with nothing added, no task appears', async ({ page }) => {
+test('AC-12: after a reload with nothing added, no task appears', { tag: '@issue-28-ac-12' }, async ({ page }) => {
   await page.reload();
   await expectCounts(page, { Todo: 0, Doing: 0, Done: 0 });
 });
