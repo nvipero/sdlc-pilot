@@ -1,0 +1,15 @@
+body {
+  font-family: system-ui, sans-serif;
+  margin: 1rem;
+}
+
+.swimlanes {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+}
+
+.swimlanes section {
+  border: 1px solid #ccc;
+  padding: 0.5rem;
+}
