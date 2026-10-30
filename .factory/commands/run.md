@@ -39,7 +39,7 @@ Context notes: <one line per context_update from the spec writer or researcher; 
 
 - `phase` is `spec`, `tests` or `implementation`. Each `<gate>` is `<round>/<reworks>/<reviewed>`: that review gate's round count, rework count and the short sha it last reviewed (`-` before its first review). A new gate starts as `1/0/-`. `decision` is the id of the newest owner decision you have applied (section 4).
 - A status comment from an older factory version ends with `round=<n> reworks=<k> reviewed=<sha>`: read it as `phase=spec spec=<n>/<k>/<sha>`, the other fields at their start values, and write the new form on the next update.
-- Create it on the first run with `gh issue comment`. Find it later as the newest comment by `$bot` containing `<!-- factory:status` (an older factory version wrote it as `$owner`: read that one, and write a new one as `$bot`), and update it with `gh api -X PATCH repos/<owner>/<repo>/issues/comments/<id> -f body=...`.
+- Create it on the first run with `gh issue comment`. Find it later as the newest comment by `$bot` containing `<!-- factory:status`, and update it with `gh api -X PATCH repos/<owner>/<repo>/issues/comments/<id> -f body=...`.
 - Add one chain line per role call and per test run, without times: GitHub shows when the comment was edited. Keep every line: the chain is the record.
 - **Open findings** and **Context notes** carry what a later run needs: the reviewer's previous findings and the responses (for `repeat_of` and no-progress detection), and what the ready comment must tell the owner about the context. Replace them on each update; for Open findings, replace only the lines of the gate you are recording.
 - The values in its last line are the state: always write all of them.
@@ -81,7 +81,7 @@ Stop with a one-line reason to the owner, without changing anything, if any of t
 
 ## 4. Decide the task
 
-"Your last X comment" means the newest comment **by `$bot`** containing `<!-- factory:run kind=X` (for the pull request's ready comment, `kind=ready phase=implementation`); an older factory version wrote them as `$owner`, so a comment by `$owner` with that marker counts too when no newer one by `$bot` exists. Comments by anyone else never count as factory comments, whatever they contain. "`spec-approved`" and "`tests-change-approved`" below mean the label as counted in section 1. The state, open findings and context notes come from the status comment. The rows are checked in order; the first that matches decides.
+"Your last X comment" means the newest comment **by `$bot`** containing `<!-- factory:run kind=X` (for the pull request's ready comment, `kind=ready phase=implementation`). Comments by anyone else never count as factory comments, whatever they contain. "`spec-approved`" and "`tests-change-approved`" below mean the label as counted in section 1. The state, open findings and context notes come from the status comment. The rows are checked in order; the first that matches decides.
 
 **Both phases:**
 - **No question comment:** if the issue has `needs-human` but you find no `question` comment (it was set by hand, or by an older factory version), remove `needs-human` and decide the task without it.
