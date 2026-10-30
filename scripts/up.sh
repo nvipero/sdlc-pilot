@@ -68,6 +68,33 @@ remove_containers() {
   done
 }
 
+# The ruleset as setup-github.sh sets it (step 4, plan decision 5): every
+# ruleset active, the only bypass the admin role in pull request mode, and one
+# requiring the code owner's approval (dismissed on push), the gate checks from
+# GitHub Actions and CodeQL. Prints the first mismatch and returns non-zero.
+REQUIRED_CHECKS='["acceptance@15368","dependency-review@15368","guards@15368","unit-and-build@15368"]'
+ruleset_problem() {
+  local nwo="$1" ids="$2" id got full=
+  for id in $ids; do
+    got="$(gh api "repos/$nwo/rulesets/$id" --jq '[.enforcement,
+        ([.bypass_actors[] | "\(.actor_type):\(.actor_id):\(.bypass_mode)"] | tostring)] | join(" ")')" \
+      || { echo "cannot read ruleset $id"; return 1; }
+    case "$got" in
+      'active []'|'active ["RepositoryRole:5:pull_request"]') ;;
+      *) echo "ruleset $id is '$got', expected active with no bypass but the admin role for pull requests"; return 1 ;;
+    esac
+    got="$(gh api "repos/$nwo/rulesets/$id" --jq '[
+        (.rules[] | select(.type == "pull_request") | .parameters
+          | (.required_approving_review_count >= 1 and .require_code_owner_review and .dismiss_stale_reviews_on_push)),
+        (.rules[] | select(.type == "required_status_checks")
+          | [.parameters.required_status_checks[] | "\(.context)@\(.integration_id)"] | sort | tostring),
+        ([.rules[] | select(.type == "code_scanning") | .parameters.code_scanning_tools[] | select(.tool == "CodeQL")] | length > 0)
+      ] | map(tostring) | join(" ")')" || { echo "cannot read ruleset $id"; return 1; }
+    [ "$got" = "true $REQUIRED_CHECKS true" ] && full=1
+  done
+  [ -n "$full" ] || { echo "no ruleset requires code owner review, the gate checks ($REQUIRED_CHECKS) and CodeQL"; return 1; }
+}
+
 # Actions as setup-github.sh sets them (step 4, plan decision 11). Prints the
 # first mismatch and returns non-zero; prints nothing when they match.
 actions_settings_problem() {
@@ -97,6 +124,12 @@ actions_settings_problem() {
     || { echo "Actions policies are '$got', expected one allowing pull_request_target for guards.yml only"; return 1; }
   got="$(gh api "repos/$nwo/actions/secrets" --jq .total_count)" || { echo "cannot read repository secrets"; return 1; }
   [ "$got" = "0" ] || { echo "$got repository-level secret(s); secrets belong to environments only"; return 1; }
+  # The dependency review gate needs the dependency graph, which has no API switch:
+  # its SBOM answers only when it is on (Settings, Advanced Security).
+  gh api "repos/$nwo/dependency-graph/sbom" --silent 2>/dev/null \
+    || { echo "the dependency graph is off (enable it in Settings, Advanced Security)"; return 1; }
+  got="$(gh api "repos/$nwo/code-scanning/default-setup" --jq .state)" || { echo "cannot read code scanning"; return 1; }
+  [ "$got" = "configured" ] || { echo "CodeQL default setup is '$got'"; return 1; }
 }
 
 # --- 1. Preflight: GitHub protections (host, owner's gh login) ---------------
@@ -120,12 +153,8 @@ preflight() {
 
   ruleset_ids="$(echo "$branch_rules" | jq -r '[.[].ruleset_id] | unique | .[]')"
   [ -n "$ruleset_ids" ] || die "no ruleset applies to main"
-  for id in $ruleset_ids; do
-    ok="$(gh api "repos/$nwo/rulesets/$id" \
-      --jq '.enforcement == "active" and has("bypass_actors") and (.bypass_actors | length == 0)')" \
-      || die "cannot read ruleset $id"
-    [ "$ok" = "true" ] || die "ruleset $id is not active or has bypass actors"
-  done
+  local problem
+  problem="$(ruleset_problem "$nwo" "$ruleset_ids")" || die "$problem; run scripts/setup-github.sh ruleset $nwo in the factory repo"
 
   scanning="$(echo "$repo" | jq -r '.security_and_analysis | "\(.secret_scanning.status) \(.secret_scanning_push_protection.status)"')"
   [ "$scanning" = "enabled enabled" ] || die "secret scanning or push protection is not enabled ($scanning)"
@@ -142,7 +171,7 @@ preflight() {
   local mismatch
   mismatch="$(actions_settings_problem "$nwo")" \
     || die "$mismatch; run scripts/setup-github.sh actions $nwo in the factory repo"
-  say "preflight OK: $nwo is $visibility, ruleset active without bypass, secret scanning and push protection on, Actions restricted, interaction limit $days days left"
+  say "preflight OK: $nwo is $visibility, ruleset requires your review and the gates (bypass: admin, PRs only), secret scanning and push protection on, Actions restricted, interaction limit $days days left"
 }
 
 # --- 2. Host clone: clean main, equal to origin/main -------------------------
