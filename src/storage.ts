@@ -13,11 +13,24 @@ function isTask(value: unknown): value is Task {
   );
 }
 
-/** Reads stored tasks; missing or malformed data yields an empty list. */
-export function loadTasks(storage: Pick<Storage, 'getItem'>): Task[] {
-  const raw = storage.getItem(STORAGE_KEY);
-  if (raw === null) return [];
+/**
+ * Returns the browser storage, or null when accessing it throws
+ * (for example when the browser blocks the page from storing data).
+ */
+export function openStorage<S>(getStorage: () => S): S | null {
   try {
+    return getStorage();
+  } catch {
+    return null;
+  }
+}
+
+/** Reads stored tasks; missing, unreadable or malformed data yields an empty list. */
+export function loadTasks(storage: Pick<Storage, 'getItem'> | null): Task[] {
+  if (storage === null) return [];
+  try {
+    const raw = storage.getItem(STORAGE_KEY);
+    if (raw === null) return [];
     const parsed: unknown = JSON.parse(raw);
     return Array.isArray(parsed) ? parsed.filter(isTask) : [];
   } catch {
@@ -25,6 +38,16 @@ export function loadTasks(storage: Pick<Storage, 'getItem'>): Task[] {
   }
 }
 
-export function saveTasks(storage: Pick<Storage, 'setItem'>, tasks: Task[]): void {
-  storage.setItem(STORAGE_KEY, JSON.stringify(tasks));
+/**
+ * Stores the whole task list. Returns false when there is no storage or writing fails,
+ * whatever the reason, so the caller can tell the user that tasks are not saved.
+ */
+export function saveTasks(storage: Pick<Storage, 'setItem'> | null, tasks: Task[]): boolean {
+  if (storage === null) return false;
+  try {
+    storage.setItem(STORAGE_KEY, JSON.stringify(tasks));
+    return true;
+  } catch {
+    return false;
+  }
 }
