@@ -37,6 +37,15 @@ RUN curl -fsSL https://downloads.claude.ai/keys/claude-code.asc -o /etc/apt/keyr
  && apt-mark hold claude-code \
  && rm -rf /var/lib/apt/lists/*
 
+# Playwright's Chromium and its system packages, installed at build time so the
+# firewall never has to open Microsoft's download CDN. Root-owned; the project
+# pins @playwright/test to exactly PLAYWRIGHT_VERSION (checked by /factory:run).
+ARG PLAYWRIGHT_VERSION=1.64.1
+ENV PLAYWRIGHT_VERSION=${PLAYWRIGHT_VERSION} \
+    PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+RUN npx -y "playwright@${PLAYWRIGHT_VERSION}" install --with-deps chromium \
+ && rm -rf /root/.npm /var/lib/apt/lists/*
+
 # Policy files: root-owned, read-only for the node user. The directories are
 # created first: COPY --chmod would otherwise give them mode 0644 as well,
 # and Claude Code would skip unreadable managed settings.
@@ -46,6 +55,11 @@ COPY --chmod=0644 allowlist.txt /etc/factory/allowlist.txt
 COPY --chmod=0755 init-firewall.sh init-workspace.sh /usr/local/bin/
 COPY --chmod=0755 container-entrypoint.sh /usr/local/bin/container-entrypoint
 COPY --chmod=0755 factory-exec.sh /usr/local/bin/factory-exec
+# gh reads the token from the read-only mount at /etc/factory/token (it comes
+# before /usr/bin/gh in PATH), and git asks it for github.com credentials.
+COPY --chmod=0755 gh-wrapper.sh /usr/local/bin/gh
+RUN git config --system credential.https://github.com.helper '' \
+ && git config --system --add credential.https://github.com.helper '!/usr/local/bin/gh auth git-credential'
 # The trailing "" allows the script only without arguments.
 RUN echo 'node ALL=(root) NOPASSWD: /usr/local/bin/init-firewall.sh ""' > /etc/sudoers.d/node-firewall \
  && chmod 0440 /etc/sudoers.d/node-firewall \

@@ -21,7 +21,7 @@ Read `docs/product-context.md` and `docs/glossary.md` yourself, and the existing
 
 Write the "Problem and why" section before anything else, in your own words:
 - What problem the story solves, and for whom.
-- Why it matters, traced to the context: name the section of `docs/product-context.md` each claim comes from, such as "(context: Users)".
+- Why it matters, traced to a source you may rely on (below): usually the section of `docs/product-context.md` the claim comes from, such as "(context: Users)", or the story itself, such as "(issue: #12)", where the story settles something the context leaves open.
 
 ## Sources you may rely on
 
@@ -38,6 +38,8 @@ Never rely on a claim tagged `(unconfirmed: …)`, on a "Research, not confirmed
 If the issue settles something the context leaves open, trace it to the issue, write the spec, and report it as `context_update` so the owner can update the context later. Do not stop the work for it.
 
 If neither the context nor the issue supports the problem, do not write a spec. Return a question about the product instead.
+
+If the story **contradicts** the context, for example it asks for one of the context's non-goals, do not write a spec either. Return one question: which one holds, the story or the context. If the context should change, the owner answers so and updates it with `/factory:context`.
 
 ## 2. The spec
 
@@ -104,13 +106,10 @@ Ask all questions at once. Keep them few: the owner's attention is the scarcest 
 
 - You are on the story branch the orchestrator checked out. Do not switch branches.
 - Stage only the spec by name: `git add specs/<issue>-<slug>.md`. Never `git add -A` or `git add .`.
-- Message in Conventional Commits form, ending with one trailer paragraph. `Factory-Role` and any other trailer, such as `Co-Authored-By`, go in that **same last paragraph with no blank line between them**, otherwise git does not read the role as a trailer:
+- Conventional Commits. Add the role with git's `--trailer` option, never by writing it into the message: git then puts it in the last trailer paragraph, next to any `Co-Authored-By`, where it parses. A `Factory-Role` line in its own paragraph does not parse, and the orchestrator stops the run. Commit under your role's name (`-c user.name="factory spec-writer"`), so the commit list shows who wrote what:
 
   ```
-  docs(spec): add spec for #<issue>
-
-  Factory-Role: spec-writer
-  Co-Authored-By: <if you add one>
+  git -c user.name="factory spec-writer" commit -m "docs(spec): add spec for #<issue>" --trailer "Factory-Role: spec-writer"
   ```
 
   For a fix: `docs(spec): address review round <n> for #<issue>`. For answers: `docs(spec): apply owner answers for #<issue>`.
