@@ -58,14 +58,12 @@ async function expectNowhere(page: Page, title: string) {
   for (const s of STATUSES) await expect(taskIn(page, s, title)).toHaveCount(0);
 }
 
-// The edit actions' accessible names in top-to-bottom order: the order of the tasks in the swimlane.
-async function orderOf(page: Page, status: Status): Promise<string[]> {
-  const snapshot = await lane(page, status).ariaSnapshot();
-  return [...snapshot.matchAll(/button "([^"]*\bEdit\b[^"]*)"/g)].map((m) => m[1]);
-}
-
-async function expectOrder(page: Page, status: Status, expected: string[]) {
-  await expect.poll(() => orderOf(page, status)).toEqual(expected);
+// Position is read by index, never by parsing a snapshot, so titles with quotes work.
+async function expectTitlesAt(page: Page, status: Status, expected: string[]) {
+  await expect(tasksIn(page, status)).toHaveCount(expected.length);
+  for (let i = 0; i < expected.length; i++) {
+    await expect(tasksIn(page, status).nth(i)).toContainText(expected[i]);
+  }
 }
 
 // Storage that works until the test sets window.__failSaves; then every write fails.
@@ -111,14 +109,12 @@ for (const status of STATUSES) {
     await addTaskIn(page, 'Alpha', status);
     await addTaskIn(page, 'Beta', status);
     await addTaskIn(page, 'Gamma', status);
-    const before = await orderOf(page, status);
-    expect(before).toHaveLength(3);
     await startEdit(page, status, 'Beta');
     await field(page).fill('Beta renamed');
     await saveButton(page).click();
     await expect(anyField(page)).toHaveCount(0);
     await expect(taskIn(page, status, 'Beta renamed')).toHaveCount(1);
-    await expectOrder(page, status, before.map((n) => n.replace('Beta', 'Beta renamed')));
+    await expectTitlesAt(page, status, ['Alpha', 'Beta renamed', 'Gamma']);
     const others = STATUSES.filter((s) => s !== status);
     for (const s of others) await expect(tasksIn(page, s)).toHaveCount(0);
     await expect(tasksIn(page, status)).toHaveCount(3);
@@ -131,20 +127,14 @@ test('saving an edited title changes no other task, including one with the same 
   await addTaskIn(page, 'Other', 'Todo');
   await addTaskIn(page, 'Doing one', 'Doing');
   await addTaskIn(page, 'Done one', 'Done');
-  const todoBefore = await orderOf(page, 'Todo');
-  const doingBefore = await orderOf(page, 'Doing');
-  const doneBefore = await orderOf(page, 'Done');
   await startEdit(page, 'Todo', 'Same', 1);
   await field(page).fill('Changed');
   await saveButton(page).click();
   await expect(taskIn(page, 'Todo', 'Changed')).toHaveCount(1);
   await expect(taskIn(page, 'Todo', 'Same')).toHaveCount(1);
-  const expectedTodo = [...todoBefore];
-  const secondSame = expectedTodo.map((n, i) => ({ n, i })).filter((x) => /Same/.test(x.n))[1];
-  expectedTodo[secondSame.i] = secondSame.n.replace('Same', 'Changed');
-  await expectOrder(page, 'Todo', expectedTodo);
-  await expectOrder(page, 'Doing', doingBefore);
-  await expectOrder(page, 'Done', doneBefore);
+  await expectTitlesAt(page, 'Todo', ['Same', 'Changed', 'Other']);
+  await expectTitlesAt(page, 'Doing', ['Doing one']);
+  await expectTitlesAt(page, 'Done', ['Done one']);
 });
 
 for (const status of STATUSES) {
@@ -168,10 +158,17 @@ test('whitespace around an edited title is not saved', { tag: '@issue-87-ac-6' }
   await saveButton(page).click();
   await expect(anyField(page)).toHaveCount(0);
   await expect(editButton(page, 'Todo', 'Buy oat milk')).toHaveCount(1);
+  const rawTitle = () => lane(page, 'Todo').getByText('Buy oat milk', { exact: true }).textContent();
+  expect(await rawTitle()).toBe('Buy oat milk');
+  // The edit field shows the stored value without the surrounding whitespace.
+  await startEdit(page, 'Todo', 'Buy oat milk');
+  await expect(field(page)).toHaveValue('Buy oat milk');
+  await field(page).press('Escape');
   await page.reload();
   await expect(taskIn(page, 'Todo', 'Buy oat milk')).toHaveCount(1);
-  expect(await orderOf(page, 'Todo')).toHaveLength(1);
-  expect((await orderOf(page, 'Todo'))[0]).not.toMatch(/\s{2}Buy oat milk|Buy oat milk\s{2}/);
+  expect(await rawTitle()).toBe('Buy oat milk');
+  await startEdit(page, 'Todo', 'Buy oat milk');
+  await expect(field(page)).toHaveValue('Buy oat milk');
 });
 
 for (const [name, text] of [['empty', ''], ['whitespace-only', '   ']] as const) {

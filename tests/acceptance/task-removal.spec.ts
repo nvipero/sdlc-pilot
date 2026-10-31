@@ -31,7 +31,7 @@ async function moveTask(page: Page, from: Status, title: string, to: Status) {
 
 async function titles(page: Page, status: Status): Promise<string[]> {
   const items = await tasksIn(page, status).allTextContents();
-  return items.map((t) => t.replace(/Remove.*$|Move to.*$/s, '').trim());
+  return items.map((t) => t.replace(/Edit.*$|Remove.*$|Move to.*$/s, '').trim());
 }
 
 async function expectCounts(page: Page, counts: Record<Status, number>) {
@@ -72,7 +72,7 @@ for (const status of STATUSES) {
   });
 }
 
-test('removing a task leaves every other task in place, with title, status and order', { tag: '@issue-29-ac-3' }, async ({ page }) => {
+test('removing a task leaves every other task in place, with title, status and order', { tag: ['@issue-29-ac-3', '@issue-87-ac-1'] }, async ({ page }) => {
   for (const t of ['One', 'Two', 'Three', 'Four']) await addTask(page, t);
   await moveTask(page, 'Todo', 'Four', 'Doing');
   await moveTask(page, 'Todo', 'Three', 'Done');
@@ -101,7 +101,7 @@ test('a message says the task was removed, names its title and offers Undo', { t
   await expect(undo(page)).toBeVisible();
 });
 
-test('Undo restores the task at its position with its title and status, and hides the message', { tag: '@issue-29-ac-5' }, async ({ page }) => {
+test('Undo restores the task at its position with its title and status, and hides the message', { tag: ['@issue-29-ac-5', '@issue-87-ac-1'] }, async ({ page }) => {
   for (const t of ['A1', 'B2', 'C3']) await addTask(page, t);
   await moveTask(page, 'Todo', 'C3', 'Doing');
   await addTask(page, 'D4');
