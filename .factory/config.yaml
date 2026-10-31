@@ -13,7 +13,7 @@ roles:
   implementer:   { model: opus }
   code-reviewer: { model: opus }
 disputes:
-  max_rounds: 4
+  max_rounds: 1   # temporary: untested-paths drill (agentic-sdlc docs/plans/untested-paths.md); back to 4 after it
   escalate_when_no_progress_for: 2   # consecutive rounds repeating the same findings
   rework_resets: 1                   # a rework restarts the round count this many times, then escalates
 light_path:
