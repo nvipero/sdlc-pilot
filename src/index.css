@@ -29,3 +29,18 @@ body {
   border: 2px solid #b00020;
   padding: 0.5rem;
 }
+
+.task {
+  cursor: grab;
+}
+
+/* Drop marks, shown only while a task is dragged. */
+.swimlanes section.drop-place {
+  outline: 3px dashed #1a73e8;
+  outline-offset: 2px;
+}
+
+.swimlanes section.drop-over {
+  outline-style: solid;
+  background-color: #e8f0fe;
+}

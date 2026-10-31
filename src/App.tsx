@@ -1,9 +1,25 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { STATUSES, addTask, moveTask, removeTask, restoreTask, type RemovedTask, type Status, type Task } from './tasks';
+import { STATUSES, addTask, dropTask, moveTask, removeTask, restoreTask, type RemovedTask, type Status, type Task } from './tasks';
 import { loadTasks, openStorage, saveTasks } from './storage';
 
 /** How long Undo is offered after a removal. */
 const UNDO_WINDOW_MS = 5000;
+
+/** How far (in pixels) the pointer must move while pressed before a press becomes a drag. */
+const DRAG_THRESHOLD_PX = 4;
+
+/** A task being dragged, and the swimlane under the pointer (null when over no swimlane). */
+interface Drag {
+  id: string;
+  from: Status;
+  over: Status | null;
+}
+
+/** The status of the swimlane at a point on the page, or null when the point is outside every swimlane. */
+function laneAt(x: number, y: number): Status | null {
+  const section = document.elementFromPoint(x, y)?.closest<HTMLElement>('[data-status]');
+  return (section?.dataset.status as Status | undefined) ?? null;
+}
 
 export function App() {
   // Accessing window.localStorage throws when the browser blocks the page from storing data.
@@ -20,6 +36,47 @@ export function App() {
   const undoRef = useRef<HTMLButtonElement>(null);
   const headingRefs = useRef(new Map<Status, HTMLHeadingElement>());
   const removeRefs = useRef(new Map<string, HTMLButtonElement>());
+  // A pressed task that has not moved far enough yet to count as a drag.
+  const pressRef = useRef<{ id: string; from: Status; x: number; y: number } | null>(null);
+  const [drag, setDrag] = useState<Drag | null>(null);
+  const dragRef = useRef<Drag | null>(null);
+
+  function updateDrag(next: Drag | null) {
+    dragRef.current = next;
+    setDrag(next);
+  }
+
+  // Dragging uses pointer events on the window, so the drag follows the pointer anywhere on the page.
+  useEffect(() => {
+    function handleMove(event: PointerEvent) {
+      const press = pressRef.current;
+      if (press === null) return;
+      const current = dragRef.current;
+      if (current === null && Math.hypot(event.clientX - press.x, event.clientY - press.y) < DRAG_THRESHOLD_PX) return;
+      const over = laneAt(event.clientX, event.clientY);
+      if (current === null || current.over !== over) updateDrag({ id: press.id, from: press.from, over });
+    }
+    function handleUp(event: PointerEvent) {
+      const current = dragRef.current;
+      pressRef.current = null;
+      if (current === null) return;
+      const target = laneAt(event.clientX, event.clientY);
+      setTasks((tasks) => dropTask(tasks, current.id, target));
+      updateDrag(null);
+    }
+    function handleCancel() {
+      pressRef.current = null;
+      updateDrag(null);
+    }
+    window.addEventListener('pointermove', handleMove);
+    window.addEventListener('pointerup', handleUp);
+    window.addEventListener('pointercancel', handleCancel);
+    return () => {
+      window.removeEventListener('pointermove', handleMove);
+      window.removeEventListener('pointerup', handleUp);
+      window.removeEventListener('pointercancel', handleCancel);
+    };
+  }, []);
 
   useEffect(() => {
     setSaveFailed(!saveTasks(storage, tasks));
@@ -98,8 +155,12 @@ export function App() {
       <div className="swimlanes">
         {STATUSES.map((status) => {
           const headingId = `lane-${status}`;
+          // While a task is dragged, every swimlane other than its own is a drop place;
+          // the one under the pointer is marked more strongly.
+          const dropClass =
+            drag === null || drag.from === status ? undefined : drag.over === status ? 'drop-place drop-over' : 'drop-place';
           return (
-            <section key={status} aria-labelledby={headingId}>
+            <section key={status} aria-labelledby={headingId} data-status={status} className={dropClass}>
               <h2
                 id={headingId}
                 tabIndex={-1}
@@ -114,7 +175,16 @@ export function App() {
                 {tasks
                   .filter((task) => task.status === status)
                   .map((task) => (
-                    <li key={task.id}>
+                    <li
+                      key={task.id}
+                      className="task"
+                      onPointerDown={(event) => {
+                        // Only the primary button on the task itself starts a drag; its buttons keep working.
+                        if (event.button !== 0 || (event.target as Element).closest('button')) return;
+                        event.preventDefault(); // no text selection while dragging
+                        pressRef.current = { id: task.id, from: status, x: event.clientX, y: event.clientY };
+                      }}
+                    >
                       <span>{task.title}</span>
                       {STATUSES.filter((s) => s !== status).map((target) => (
                         <button

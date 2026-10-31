@@ -23,6 +23,17 @@ export function moveTask(tasks: Task[], id: string, status: Status): Task[] {
   return tasks.map((task) => (task.id === id ? { ...task, status } : task));
 }
 
+/**
+ * Applies a drag-and-drop release: `target` is the status of the swimlane the task was dropped on,
+ * or null when it was released outside every swimlane. Returns the same array when nothing changes
+ * (outside, its own swimlane, or an unknown id), so no save is needed.
+ */
+export function dropTask(tasks: Task[], id: string, target: Status | null): Task[] {
+  const task = tasks.find((t) => t.id === id);
+  if (target === null || task === undefined || task.status === target) return tasks;
+  return moveTask(tasks, id, target);
+}
+
 /** A removed task and its index in the task list, so Undo can put it back where it was. */
 export interface RemovedTask {
   task: Task;

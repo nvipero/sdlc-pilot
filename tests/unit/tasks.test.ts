@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addTask, moveTask, removeTask, restoreTask, type Task } from '../../src/tasks';
+import { addTask, dropTask, moveTask, removeTask, restoreTask, type Task } from '../../src/tasks';
 
 describe('addTask', () => {
   it('adds a task in Todo with a trimmed title', () => {
@@ -76,5 +76,35 @@ describe('restoreTask', () => {
 
   it('returns the same array when the task is already present', () => {
     expect(restoreTask(tasks, { task: tasks[1], index: 0 })).toBe(tasks);
+  });
+});
+
+describe('dropTask', () => {
+  const tasks: Task[] = [
+    { id: 'a', title: 'Same', status: 'Todo' },
+    { id: 'b', title: 'Same', status: 'Doing' },
+  ];
+
+  it('moves the dropped task to the swimlane status and leaves the others', () => {
+    expect(dropTask(tasks, 'a', 'Done')).toEqual([
+      { id: 'a', title: 'Same', status: 'Done' },
+      { id: 'b', title: 'Same', status: 'Doing' },
+    ]);
+  });
+
+  it('allows a move backward', () => {
+    expect(dropTask(tasks, 'b', 'Todo')[1].status).toBe('Todo');
+  });
+
+  it('returns the same array for a drop on the task\'s own swimlane', () => {
+    expect(dropTask(tasks, 'b', 'Doing')).toBe(tasks);
+  });
+
+  it('returns the same array for a release outside every swimlane', () => {
+    expect(dropTask(tasks, 'a', null)).toBe(tasks);
+  });
+
+  it('returns the same array for an unknown id', () => {
+    expect(dropTask(tasks, 'x', 'Done')).toBe(tasks);
   });
 });
