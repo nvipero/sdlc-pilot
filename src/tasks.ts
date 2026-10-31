@@ -56,3 +56,13 @@ export function restoreTask(tasks: Task[], { task, index }: RemovedTask): Task[]
   const at = Math.min(index, tasks.length);
   return [...tasks.slice(0, at), task, ...tasks.slice(at)];
 }
+
+/**
+ * Gives the task with the given id a new, trimmed title; its status and position stay.
+ * Returns the same array when the trimmed title is empty or the id is unknown, so nothing is saved.
+ */
+export function renameTask(tasks: Task[], id: string, title: string): Task[] {
+  const trimmed = title.trim();
+  if (trimmed === '' || !tasks.some((task) => task.id === id)) return tasks;
+  return tasks.map((task) => (task.id === id ? { ...task, title: trimmed } : task));
+}

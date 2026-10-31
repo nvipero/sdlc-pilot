@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addTask, dropTask, moveTask, removeTask, restoreTask, type Task } from '../../src/tasks';
+import { addTask, dropTask, moveTask, removeTask, renameTask, restoreTask, type Task } from '../../src/tasks';
 
 describe('addTask', () => {
   it('adds a task in Todo with a trimmed title', () => {
@@ -106,5 +106,38 @@ describe('dropTask', () => {
 
   it('returns the same array for an unknown id', () => {
     expect(dropTask(tasks, 'x', 'Done')).toBe(tasks);
+  });
+});
+
+describe('renameTask', () => {
+  const tasks: Task[] = [
+    { id: 'a', title: 'Same', status: 'Todo' },
+    { id: 'b', title: 'Same', status: 'Doing' },
+    { id: 'c', title: 'Other', status: 'Todo' },
+  ];
+
+  it('changes only the title of the task with the given id, keeping status and position', () => {
+    expect(renameTask(tasks, 'b', 'New')).toEqual([
+      { id: 'a', title: 'Same', status: 'Todo' },
+      { id: 'b', title: 'New', status: 'Doing' },
+      { id: 'c', title: 'Other', status: 'Todo' },
+    ]);
+  });
+
+  it('trims whitespace around the new title', () => {
+    expect(renameTask(tasks, 'c', '  Buy oat milk  ')[2].title).toBe('Buy oat milk');
+  });
+
+  it('allows a title another task already has', () => {
+    expect(renameTask(tasks, 'c', 'Same').map((t) => t.title)).toEqual(['Same', 'Same', 'Same']);
+  });
+
+  it('returns the same array for an empty or whitespace-only title', () => {
+    expect(renameTask(tasks, 'a', '')).toBe(tasks);
+    expect(renameTask(tasks, 'a', ' \t ')).toBe(tasks);
+  });
+
+  it('returns the same array for an unknown id', () => {
+    expect(renameTask(tasks, 'x', 'New')).toBe(tasks);
   });
 });

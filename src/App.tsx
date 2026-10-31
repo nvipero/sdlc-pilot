@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { STATUSES, addTask, dropTask, moveTask, removeTask, restoreTask, type RemovedTask, type Status, type Task } from './tasks';
+import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
+import { STATUSES, addTask, dropTask, moveTask, removeTask, renameTask, restoreTask, type RemovedTask, type Status, type Task } from './tasks';
 import { loadTasks, openStorage, saveTasks } from './storage';
 
 /** How long Undo is offered after a removal. */
@@ -40,6 +40,13 @@ export function App() {
   const pressRef = useRef<{ id: string; from: Status; x: number; y: number } | null>(null);
   const [drag, setDrag] = useState<Drag | null>(null);
   const dragRef = useRef<Drag | null>(null);
+  // The task whose title is being edited, with the text in its field. Only one task at a time.
+  const [editing, setEditing] = useState<{ id: string; draft: string } | null>(null);
+  const editFormRef = useRef<HTMLFormElement>(null);
+  const editRefs = useRef(new Map<string, HTMLButtonElement>());
+  const [focusEditOf, setFocusEditOf] = useState<string | null>(null);
+  const pointerDownRef = useRef(false);
+  const pressedOutsideRef = useRef(false);
 
   function updateDrag(next: Drag | null) {
     dragRef.current = next;
@@ -99,6 +106,62 @@ export function App() {
     removeRefs.current.get(focusRemoveOf)?.focus();
     setFocusRemoveOf(null);
   }, [focusRemoveOf]);
+
+  useEffect(() => {
+    if (focusEditOf === null) return;
+    editRefs.current.get(focusEditOf)?.focus();
+    setFocusEditOf(null);
+  }, [focusEditOf]);
+
+  // A click whose press started outside the edit's field, Save and Cancel cancels the edit, and the
+  // click then does what it would do anyway. A press that starts in the field and ends elsewhere is
+  // not outside. The edit ends on the click, not on the press, so the page does not change under the
+  // pointer before the click lands.
+  useEffect(() => {
+    if (editing === null) return;
+    const id = editing.id;
+    pointerDownRef.current = false;
+    pressedOutsideRef.current = false;
+    function handlePointerDown(event: PointerEvent) {
+      pointerDownRef.current = true;
+      pressedOutsideRef.current = !editFormRef.current?.contains(event.target as Node);
+    }
+    function handlePointerUp() {
+      pointerDownRef.current = false;
+    }
+    function handleClick() {
+      if (pressedOutsideRef.current) setEditing((current) => (current?.id === id ? null : current));
+      pressedOutsideRef.current = false;
+    }
+    document.addEventListener('pointerdown', handlePointerDown, true);
+    document.addEventListener('pointerup', handlePointerUp, true);
+    document.addEventListener('click', handleClick, true);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown, true);
+      document.removeEventListener('pointerup', handlePointerUp, true);
+      document.removeEventListener('click', handleClick, true);
+    };
+  }, [editing?.id]);
+
+  function endEdit(id: string) {
+    setEditing(null);
+    setFocusEditOf(id);
+  }
+
+  function handleEditSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (editing === null) return;
+    // An empty or whitespace-only title is not saved: renameTask leaves the list as it is,
+    // and the edit ends as if it was cancelled.
+    setTasks((current) => renameTask(current, editing.id, editing.draft));
+    endEdit(editing.id);
+  }
+
+  function handleEditKeyDown(event: KeyboardEvent<HTMLFormElement>) {
+    if (event.key !== 'Escape' || editing === null) return;
+    event.preventDefault();
+    endEdit(editing.id);
+  }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -180,12 +243,57 @@ export function App() {
                       className="task"
                       onPointerDown={(event) => {
                         // Only the primary button on the task itself starts a drag; its buttons keep working.
-                        if (event.button !== 0 || (event.target as Element).closest('button')) return;
+                        // The title field is left out too, so text in it can be selected by dragging.
+                        if (event.button !== 0 || (event.target as Element).closest('button, input')) return;
                         event.preventDefault(); // no text selection while dragging
                         pressRef.current = { id: task.id, from: status, x: event.clientX, y: event.clientY };
                       }}
                     >
-                      <span>{task.title}</span>
+                      {editing?.id === task.id ? (
+                        <form
+                          ref={editFormRef}
+                          className="edit"
+                          onSubmit={handleEditSubmit}
+                          onKeyDown={handleEditKeyDown}
+                          onBlur={(event) => {
+                            // Moving focus with Tab out of the field, Save and Cancel cancels the edit,
+                            // as a click outside does. Focus moved by a pointer press is left to the click.
+                            const next = event.relatedTarget;
+                            if (pointerDownRef.current || next === null || event.currentTarget.contains(next)) return;
+                            setEditing(null);
+                          }}
+                        >
+                          <label htmlFor={`edit-title-${task.id}`} className="visually-hidden">
+                            Title
+                          </label>
+                          <input
+                            id={`edit-title-${task.id}`}
+                            type="text"
+                            autoFocus
+                            value={editing.draft}
+                            onChange={(event) => setEditing({ id: task.id, draft: event.target.value })}
+                          />
+                          <button type="submit">Save</button>
+                          <button type="button" onClick={() => endEdit(task.id)}>
+                            Cancel
+                          </button>
+                        </form>
+                      ) : (
+                        <>
+                          <span>{task.title}</span>
+                          <button
+                            type="button"
+                            aria-label={`Edit ${task.title}`}
+                            ref={(el) => {
+                              if (el) editRefs.current.set(task.id, el);
+                              else editRefs.current.delete(task.id);
+                            }}
+                            onClick={() => setEditing({ id: task.id, draft: task.title })}
+                          >
+                            Edit
+                          </button>
+                        </>
+                      )}
                       {STATUSES.filter((s) => s !== status).map((target) => (
                         <button
                           key={target}

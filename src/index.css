@@ -44,3 +44,17 @@ body {
   outline-style: solid;
   background-color: #e8f0fe;
 }
+
+.task .edit {
+  display: inline;
+}
+
+/* Hidden on screen, still read by screen readers. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
