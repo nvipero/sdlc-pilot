@@ -389,3 +389,57 @@ test('clicking inside the field, Save or Cancel area does not count as outside',
   await saveButton(page).click();
   await expect(taskIn(page, 'Todo', 'Alpha kept')).toHaveCount(1);
 });
+
+// Presses Tab or Shift+Tab until keyboard focus is outside the text field and its Save and Cancel actions.
+// While focus is still inside that group the edit must stay open (AC-16).
+async function tabOutOfEdit(page: Page, key: 'Tab' | 'Shift+Tab') {
+  const group = field(page).or(saveButton(page)).or(cancelButton(page));
+  const focusedInGroup = page.locator(':focus').and(group);
+  for (let i = 0; i < 4; i++) {
+    await page.keyboard.press(key);
+    if ((await focusedInGroup.count()) === 0) return;
+    await expect(field(page)).toBeVisible();
+  }
+  throw new Error('keyboard focus never left the edit');
+}
+
+test('Tab and Shift+Tab between the field, Save and Cancel keep the edit open', { tag: '@issue-87-ac-16' }, async ({ page }) => {
+  await addTask(page, 'Alpha');
+  await startEdit(page, 'Todo', 'Alpha');
+  await field(page).fill('Alpha draft');
+  const group = field(page).or(saveButton(page)).or(cancelButton(page));
+  await page.keyboard.press('Tab');
+  await expect(page.locator(':focus').and(saveButton(page).or(cancelButton(page)))).toHaveCount(1);
+  await expect(field(page)).toHaveValue('Alpha draft');
+  await page.keyboard.press('Tab');
+  await expect(page.locator(':focus').and(group)).toHaveCount(1);
+  await expect(field(page)).toBeVisible();
+  await page.keyboard.press('Shift+Tab');
+  await page.keyboard.press('Shift+Tab');
+  await expect(field(page)).toBeFocused();
+  await expect(field(page)).toHaveValue('Alpha draft');
+  await field(page).press('Enter');
+  await expect(taskIn(page, 'Todo', 'Alpha draft')).toHaveCount(1);
+});
+
+for (const key of ['Tab', 'Shift+Tab'] as const) {
+  test(`${key} out of the edit cancels it, stores nothing and leaves focus where it moved`, { tag: '@issue-87-ac-16' }, async ({ page }) => {
+    await addTask(page, 'Alpha');
+    await addTask(page, 'Beta');
+    await addTask(page, 'Gamma');
+    await startEdit(page, 'Todo', 'Beta');
+    await field(page).fill('Beta changed');
+    await tabOutOfEdit(page, key);
+    await expect(anyField(page)).toHaveCount(0);
+    await expect(taskIn(page, 'Todo', 'Beta')).toHaveCount(1);
+    await expectNowhere(page, 'Beta changed');
+    await expectCounts(page, { Todo: 3, Doing: 0, Done: 0 });
+    // Focus is on some element Tab moved it to, not pulled back to the edit action (AC-11 does not apply).
+    await expect(page.locator(':focus')).not.toHaveCount(0);
+    await expect(page.locator('body:focus')).toHaveCount(0);
+    await expect(editButton(page, 'Todo', 'Beta')).not.toBeFocused();
+    await page.reload();
+    await expect(taskIn(page, 'Todo', 'Beta')).toHaveCount(1);
+    await expectNowhere(page, 'Beta changed');
+  });
+}
