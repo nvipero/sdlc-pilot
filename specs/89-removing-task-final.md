@@ -32,9 +32,9 @@ The context still lists "can a task be deleted?" as an open question (context: O
 ## Acceptance criteria
 
 - AC-1: When the user activates a task's remove action, the task immediately stops appearing in its swimlane, without any confirmation step, and every other task keeps its swimlane, title, status and order.
-- AC-2: After a task is removed, no Undo action is offered anywhere in the page and no message about the removal is shown, neither right after the removal nor at any later time.
+- AC-2: After a task is removed, no Undo action is offered anywhere in the page and no message about the removal is shown, neither right after the removal nor during the 10 seconds after it, nor after a page reload.
 - AC-3: A removed task does not appear in any swimlane after the page is reloaded, also when the reload happens right after the removal (within 1 second), and after the browser is closed and the app is opened again.
-- AC-4: When the user removes several tasks one after the other, each task stops appearing at once when its remove action is activated, without waiting for an earlier removal to finish, and none of the removed tasks appears in any swimlane, also after a page reload.
+- AC-4: When the user removes several tasks in quick succession (each remove action activated within 100 ms of the previous one), none of the removed tasks appears in any swimlane, also after a page reload, and every task that was not removed keeps its swimlane, title, status and order.
 - AC-5: Using only the keyboard, the user can move focus to a task's remove action and activate it with Enter or Space, and the task is removed as in AC-1. No step needs a mouse, and no step needs keys to be pressed within a time limit.
 - AC-6: After a task is removed with its remove action, keyboard focus is on:
   - the remove action of the task that followed the removed task in the same swimlane, if there is one;
@@ -45,7 +45,7 @@ The context still lists "can a task be deleted?" as an open question (context: O
 ## Assumptions
 
 - No message of any kind is shown after a removal, not only no Undo (AC-2). (why it is safe: the owner says the message gets in the way when cleaning up several tasks (issue: #89), and the removed task disappearing from its swimlane already shows the outcome)
-- Focus goes first to the next task's remove action, then to the previous one, then to the swimlane heading (AC-6). (why it is safe: when a deletion removes the focused item, focus should be set on purpose, to an equivalent control or a stable parent (standard: https://primer.style/product/scenario-patterns/delete/, read 2026-10-23, as recorded in `docs/research/29-task-removal-safeguard.md`); taking the next task first lets the owner clean up several tasks in a row (issue: #89))
+- Focus goes first to the next task's remove action, then to the previous one, then to the swimlane heading (AC-6). (why it is safe: when a deletion removes the focused item, focus should be set on purpose, to an equivalent control or a stable parent such as a list heading (docs: https://primer.style/product/scenario-patterns/delete/, read 2026-10-23, as recorded in `docs/research/29-task-removal-safeguard.md`). That page prefers the previous equivalent control; taking the next task first is this spec's own choice, because it lets the owner clean up several tasks in a row from the top of a swimlane down (issue: #89))
 - Focus stays in the swimlane the task was removed from and does not jump to another swimlane. (why it is safe: the swimlane heading is the stable parent spec 29 AC-12 already uses as a focus target)
 - The swimlane heading can receive focus. (why it is safe: spec 29 AC-12 already requires it)
 - AC-6 applies to removal with a mouse as well as with the keyboard. (why it is safe: it only decides where focus goes; it does not change what a mouse user can do)
