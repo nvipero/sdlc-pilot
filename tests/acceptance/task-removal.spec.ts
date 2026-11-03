@@ -42,9 +42,11 @@ async function expectNowhere(page: Page, title: string) {
   for (const s of STATUSES) await expect(taskIn(page, s, title)).toHaveCount(0);
 }
 
-// Waits until the message and its Undo are gone, allowing the 5 s window plus 1 s tolerance.
-async function waitUndoWindowEnd(page: Page) {
-  await expect(undo(page)).toBeHidden({ timeout: 7000 });
+// No Undo and no message about the removal anywhere in the page.
+async function expectNoRemovalMessage(page: Page) {
+  await expect(undo(page)).toHaveCount(0);
+  await expect(page.getByText(/removed/i)).toHaveCount(0);
+  await expect(message(page).filter({ hasText: /\S/ })).toHaveCount(0);
 }
 
 for (const status of STATUSES) {
@@ -59,7 +61,7 @@ for (const status of STATUSES) {
     await expect(removeButton(page, status, 'Beta')).toHaveCount(1);
   });
 
-  test(`a task removed from ${status} disappears at once without confirmation`, { tag: '@issue-29-ac-2' }, async ({ page }) => {
+  test(`a task removed from ${status} disappears at once without confirmation`, { tag: ['@issue-29-ac-2', '@issue-89-ac-1'] }, async ({ page }) => {
     await addTask(page, 'Gone');
     if (status !== 'Todo') await moveTask(page, 'Todo', 'Gone', status);
     await expect(taskIn(page, status, 'Gone')).toHaveCount(1);
@@ -72,7 +74,7 @@ for (const status of STATUSES) {
   });
 }
 
-test('removing a task leaves every other task in place, with title, status and order', { tag: ['@issue-29-ac-3', '@issue-87-ac-1'] }, async ({ page }) => {
+test('removing a task leaves every other task in place, with title, status and order', { tag: ['@issue-29-ac-3', '@issue-87-ac-1', '@issue-89-ac-1'] }, async ({ page }) => {
   for (const t of ['One', 'Two', 'Three', 'Four']) await addTask(page, t);
   await moveTask(page, 'Todo', 'Four', 'Doing');
   await moveTask(page, 'Todo', 'Three', 'Done');
@@ -85,82 +87,42 @@ test('removing a task leaves every other task in place, with title, status and o
   expect(await titles(page, 'Done')).toEqual(before.Done);
 });
 
-test('removing one of two tasks with the same title leaves the other', { tag: '@issue-29-ac-3' }, async ({ page }) => {
+test('removing one of two tasks with the same title leaves the other', { tag: ['@issue-29-ac-3', '@issue-89-ac-1'] }, async ({ page }) => {
   await addTask(page, 'Twin');
   await addTask(page, 'Twin');
   await removeButton(page, 'Todo', 'Twin').first().click();
   await expect(taskIn(page, 'Todo', 'Twin')).toHaveCount(1);
 });
 
-test('a message says the task was removed, names its title and offers Undo', { tag: '@issue-29-ac-4' }, async ({ page }) => {
-  await addTask(page, 'Pay rent');
-  await removeButton(page, 'Todo', 'Pay rent').click();
-  await expect(message(page)).toBeVisible();
-  await expect(message(page)).toContainText(/removed/i);
-  await expect(message(page)).toContainText('Pay rent');
-  await expect(undo(page)).toBeVisible();
-});
+for (const status of STATUSES) {
+  test(`removing a task from ${status} shows no message and offers no Undo`, { tag: '@issue-89-ac-2' }, async ({ page }) => {
+    await addTask(page, 'Pay rent');
+    if (status !== 'Todo') await moveTask(page, 'Todo', 'Pay rent', status);
+    await removeButton(page, status, 'Pay rent').click();
+    await expect(taskIn(page, status, 'Pay rent')).toHaveCount(0);
+    await expectNoRemovalMessage(page);
+  });
+}
 
-test('Undo restores the task at its position with its title and status, and hides the message', { tag: ['@issue-29-ac-5', '@issue-87-ac-1'] }, async ({ page }) => {
-  for (const t of ['A1', 'B2', 'C3']) await addTask(page, t);
-  await moveTask(page, 'Todo', 'C3', 'Doing');
-  await addTask(page, 'D4');
-  // Todo: A1, B2, D4. Remove the first, middle and last in turn.
-  for (const t of ['A1', 'B2', 'D4']) {
-    const before = await titles(page, 'Todo');
-    await removeButton(page, 'Todo', t).click();
-    await expect(taskIn(page, 'Todo', t)).toHaveCount(0);
-    await undo(page).click();
-    await expect(taskIn(page, 'Todo', t)).toHaveCount(1);
-    expect(await titles(page, 'Todo')).toEqual(before);
-    await expect(undo(page)).toHaveCount(0);
-    await expect(message(page).filter({ hasText: /removed/i })).toHaveCount(0);
+test('no message or Undo appears during the 10 seconds after a removal or after a reload', { tag: '@issue-89-ac-2' }, async ({ page }) => {
+  test.setTimeout(30000);
+  await addTask(page, 'Quiet');
+  await addTask(page, 'Other');
+  await removeButton(page, 'Todo', 'Quiet').click();
+  for (let i = 0; i < 10; i++) {
+    await expectNoRemovalMessage(page);
+    await page.waitForTimeout(1000);
   }
-  expect(await titles(page, 'Doing')).toEqual(['C3']);
+  await expectNoRemovalMessage(page);
+  await page.reload();
+  await expect(taskIn(page, 'Todo', 'Other')).toHaveCount(1);
+  await expectNoRemovalMessage(page);
 });
 
-test('Undo restores a task to the Done swimlane', { tag: '@issue-29-ac-5' }, async ({ page }) => {
-  await addTask(page, 'Finished');
-  await moveTask(page, 'Todo', 'Finished', 'Done');
-  await removeButton(page, 'Done', 'Finished').click();
-  await undo(page).click();
-  await expect(taskIn(page, 'Done', 'Finished')).toHaveCount(1);
-  await expect(taskIn(page, 'Todo', 'Finished')).toHaveCount(0);
-});
-
-test('without Undo the message disappears after about 5 seconds and the task stays gone', { tag: '@issue-29-ac-6' }, async ({ page }) => {
-  await addTask(page, 'Fading');
-  await removeButton(page, 'Todo', 'Fading').click();
-  await expect(undo(page)).toBeVisible();
-  // Still offered well before the 5 s mark (tolerance 1 s).
-  await page.waitForTimeout(3000);
-  await expect(undo(page)).toBeVisible();
-  await waitUndoWindowEnd(page);
-  await expect(message(page).filter({ hasText: 'Fading' })).toHaveCount(0);
-  await expectNowhere(page, 'Fading');
-});
-
-test('the 5 seconds do not pause while the pointer is over Undo', { tag: '@issue-29-ac-6' }, async ({ page }) => {
-  await addTask(page, 'Hovered');
-  await removeButton(page, 'Todo', 'Hovered').click();
-  await undo(page).hover();
-  await waitUndoWindowEnd(page);
-  await expectNowhere(page, 'Hovered');
-});
-
-test('the 5 seconds do not pause while Undo has keyboard focus', { tag: '@issue-29-ac-6' }, async ({ page }) => {
-  await addTask(page, 'Focused');
-  await removeButton(page, 'Todo', 'Focused').click();
-  await expect(undo(page)).toBeFocused();
-  await waitUndoWindowEnd(page);
-  await expectNowhere(page, 'Focused');
-});
-
-test('a removed task stays removed after a reload and in a new browser session', { tag: '@issue-29-ac-7' }, async ({ page, browser, baseURL }) => {
+test('a removed task stays removed after a reload and in a new browser session', { tag: ['@issue-29-ac-7', '@issue-89-ac-3'] }, async ({ page, browser, baseURL }) => {
   await addTask(page, 'Kept');
   await addTask(page, 'Dropped');
   await removeButton(page, 'Todo', 'Dropped').click();
-  await waitUndoWindowEnd(page);
   await page.reload();
   await expect(taskIn(page, 'Todo', 'Kept')).toHaveCount(1);
   await expectNowhere(page, 'Dropped');
@@ -174,96 +136,138 @@ test('a removed task stays removed after a reload and in a new browser session',
   await context.close();
 });
 
-test('reloading during the undo window removes the task for good and offers no Undo', { tag: '@issue-29-ac-8' }, async ({ page }) => {
+test('a reload right after a removal does not bring the task back', { tag: '@issue-89-ac-3' }, async ({ page }) => {
   await addTask(page, 'Stays');
   await addTask(page, 'Reloaded');
   await removeButton(page, 'Todo', 'Reloaded').click();
-  await expect(undo(page)).toBeVisible();
   await page.reload();
   await expect(taskIn(page, 'Todo', 'Stays')).toHaveCount(1);
   await expectNowhere(page, 'Reloaded');
-  await expect(undo(page)).toHaveCount(0);
+  await expectNoRemovalMessage(page);
 });
 
-test('closing the page during the undo window removes the task for good', { tag: '@issue-29-ac-8' }, async ({ page }) => {
+test('closing the page right after a removal does not bring the task back', { tag: '@issue-89-ac-3' }, async ({ page }) => {
   await addTask(page, 'Stays');
   await addTask(page, 'Closed');
   await removeButton(page, 'Todo', 'Closed').click();
-  await expect(undo(page)).toBeVisible();
   const context = page.context();
   await page.close({ runBeforeUnload: true });
   const next = await context.newPage();
   await next.goto('/');
   await expect(taskIn(next, 'Todo', 'Stays')).toHaveCount(1);
   await expectNowhere(next, 'Closed');
-  await expect(undo(next)).toHaveCount(0);
+  await expectNoRemovalMessage(next);
 });
 
-test('a task restored with Undo is still there after a reload', { tag: '@issue-29-ac-9' }, async ({ page }) => {
-  await addTask(page, 'Back');
-  await moveTask(page, 'Todo', 'Back', 'Doing');
-  await removeButton(page, 'Doing', 'Back').click();
-  await undo(page).click();
-  await expect(taskIn(page, 'Doing', 'Back')).toHaveCount(1);
+test('removing several tasks in quick succession removes them all, also after a reload', { tag: '@issue-89-ac-4' }, async ({ page }) => {
+  for (const t of ['T1', 'T2', 'T3', 'T4', 'T5']) await addTask(page, t);
+  await moveTask(page, 'Todo', 'T5', 'Doing');
+  await addTask(page, 'T6');
+  await moveTask(page, 'Todo', 'T6', 'Done');
+  await addTask(page, 'T7');
+  const doing = await titles(page, 'Doing');
+  const done = await titles(page, 'Done');
+  // Todo: T1 T2 T3 T4 T7. Activate the remove actions with no wait between them.
+  const targets = ['T1', 'T2', 'T4'];
+  const buttons = targets.map((t) => removeButton(page, 'Todo', t));
+  for (const b of buttons) {
+    await b.dispatchEvent('click');
+  }
+  for (const t of targets) await expectNowhere(page, t);
+  expect(await titles(page, 'Todo')).toEqual(['T3', 'T7']);
   await page.reload();
-  await expectCounts(page, { Todo: 0, Doing: 1, Done: 0 });
-  await expect(taskIn(page, 'Doing', 'Back')).toHaveCount(1);
+  for (const t of targets) await expectNowhere(page, t);
+  expect(await titles(page, 'Todo')).toEqual(['T3', 'T7']);
+  expect(await titles(page, 'Doing')).toEqual(doing);
+  expect(await titles(page, 'Done')).toEqual(done);
 });
 
-test('removing a second task makes the first removal final; Undo restores only the second', { tag: '@issue-29-ac-10' }, async ({ page }) => {
-  await addTask(page, 'First');
-  await addTask(page, 'Second');
-  await addTask(page, 'Third');
-  await removeButton(page, 'Todo', 'First').click();
-  await expect(message(page)).toContainText('First');
-  await removeButton(page, 'Todo', 'Second').click();
-  await expect(message(page)).toContainText('Second');
-  await expect(message(page)).not.toContainText('First');
-  await expect(undo(page)).toHaveCount(1);
-  await undo(page).click();
-  await expect(taskIn(page, 'Todo', 'Second')).toHaveCount(1);
-  await expect(taskIn(page, 'Todo', 'Third')).toHaveCount(1);
-  await expectNowhere(page, 'First');
-  await page.reload();
-  await expect(taskIn(page, 'Todo', 'Second')).toHaveCount(1);
-  await expectNowhere(page, 'First');
+test('a task is removed using only the keyboard, with Enter', { tag: '@issue-89-ac-5' }, async ({ page }) => {
+  await addTask(page, 'Keys');
+  await addTask(page, 'Other');
+  await removeButton(page, 'Todo', 'Keys').focus();
+  await expect(removeButton(page, 'Todo', 'Keys')).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(taskIn(page, 'Todo', 'Keys')).toHaveCount(0);
+  await expect(taskIn(page, 'Todo', 'Other')).toHaveCount(1);
 });
 
-test('the removal message is announced as a status message', { tag: '@issue-29-ac-11' }, async ({ page }) => {
-  await addTask(page, 'Announced');
-  // The live region must exist before the change for screen readers to announce it, so
-  // it is checked by role once the message has appeared.
-  await removeButton(page, 'Todo', 'Announced').click();
-  const live = message(page).filter({ hasText: 'Announced' });
-  await expect(live).toBeVisible();
-  await expect(live).toContainText(/removed/i);
+test('a task is removed using only the keyboard, with Space', { tag: '@issue-89-ac-5' }, async ({ page }) => {
+  await addTask(page, 'Keys');
+  await addTask(page, 'Other');
+  await removeButton(page, 'Todo', 'Keys').focus();
+  await page.keyboard.press('Space');
+  await expect(taskIn(page, 'Todo', 'Keys')).toHaveCount(0);
+  await expect(taskIn(page, 'Todo', 'Other')).toHaveCount(1);
 });
 
-test('after removal focus is on Undo; after Undo it is on the restored remove action', { tag: '@issue-29-ac-12' }, async ({ page }) => {
-  await addTask(page, 'Focus me');
-  await removeButton(page, 'Todo', 'Focus me').click();
-  await expect(undo(page)).toBeFocused();
-  await undo(page).click();
-  await expect(removeButton(page, 'Todo', 'Focus me')).toBeFocused();
+test('the remove action can be reached with Tab alone', { tag: '@issue-89-ac-5' }, async ({ page }) => {
+  await addTask(page, 'Only');
+  await page.getByRole('button', { name: 'Add task' }).focus();
+  const target = removeButton(page, 'Todo', 'Only');
+  for (let i = 0; i < 20 && !(await target.evaluate((el) => el === document.activeElement)); i++) {
+    await page.keyboard.press('Tab');
+  }
+  await expect(target).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(taskIn(page, 'Todo', 'Only')).toHaveCount(0);
+});
+
+test('after removing a task, focus goes to the remove action of the next task in the swimlane', { tag: '@issue-89-ac-6' }, async ({ page }) => {
+  for (const t of ['A', 'B', 'C']) await addTask(page, t);
+  await removeButton(page, 'Todo', 'B').click();
+  await expect(taskIn(page, 'Todo', 'B')).toHaveCount(0);
+  await expect(removeButton(page, 'Todo', 'C')).toBeFocused();
+});
+
+test('after removing the first task, focus goes to the next one, also in Doing and Done', { tag: '@issue-89-ac-6' }, async ({ page }) => {
+  for (const s of ['Doing', 'Done'] as const) {
+    await addTask(page, `${s}1`);
+    await addTask(page, `${s}2`);
+    await moveTask(page, 'Todo', `${s}1`, s);
+    await moveTask(page, 'Todo', `${s}2`, s);
+    await removeButton(page, s, `${s}1`).click();
+    await expect(removeButton(page, s, `${s}2`)).toBeFocused();
+  }
+});
+
+test('after removing the last task of a swimlane, focus goes to the previous task', { tag: '@issue-89-ac-6' }, async ({ page }) => {
+  for (const t of ['A', 'B', 'C']) await addTask(page, t);
+  await removeButton(page, 'Todo', 'C').click();
+  await expect(taskIn(page, 'Todo', 'C')).toHaveCount(0);
+  await expect(removeButton(page, 'Todo', 'B')).toBeFocused();
 });
 
 for (const status of STATUSES) {
-  test(`focus on Undo moves to the ${status} heading when the message disappears`, { tag: '@issue-29-ac-12' }, async ({ page }) => {
-    await addTask(page, 'Lane focus');
-    if (status !== 'Todo') await moveTask(page, 'Todo', 'Lane focus', status);
-    await removeButton(page, status, 'Lane focus').click();
-    await expect(undo(page)).toBeFocused();
-    await waitUndoWindowEnd(page);
+  test(`after removing the only task of ${status}, focus goes to the ${status} heading`, { tag: '@issue-89-ac-6' }, async ({ page }) => {
+    await addTask(page, 'Lonely');
+    if (status !== 'Todo') await moveTask(page, 'Todo', 'Lonely', status);
+    await removeButton(page, status, 'Lonely').click();
+    await expect(taskIn(page, status, 'Lonely')).toHaveCount(0);
     await expect(page.getByRole('heading', { name: status })).toBeFocused();
   });
 }
 
-test('focus the user moved elsewhere is not moved when the message disappears', { tag: '@issue-29-ac-12' }, async ({ page }) => {
-  await addTask(page, 'Elsewhere');
-  await removeButton(page, 'Todo', 'Elsewhere').click();
-  const title = page.getByRole('textbox', { name: 'Title' });
-  await title.focus();
-  await expect(title).toBeFocused();
-  await waitUndoWindowEnd(page);
-  await expect(title).toBeFocused();
+test('focus stays in the swimlane of the removed task', { tag: '@issue-89-ac-6' }, async ({ page }) => {
+  await addTask(page, 'Left');
+  await addTask(page, 'Right');
+  await moveTask(page, 'Todo', 'Right', 'Doing');
+  await removeButton(page, 'Todo', 'Left').click();
+  await expect(page.getByRole('heading', { name: 'Todo' })).toBeFocused();
+});
+
+test('pressing Enter repeatedly removes the tasks of a swimlane one after another', { tag: '@issue-89-ac-7' }, async ({ page }) => {
+  for (const t of ['R1', 'R2', 'R3', 'R4']) await addTask(page, t);
+  await removeButton(page, 'Todo', 'R1').focus();
+  await page.keyboard.press('Enter');
+  await expect(taskIn(page, 'Todo', 'R1')).toHaveCount(0);
+  await page.keyboard.press('Enter');
+  await expect(taskIn(page, 'Todo', 'R2')).toHaveCount(0);
+  await page.keyboard.press('Enter');
+  await expect(taskIn(page, 'Todo', 'R3')).toHaveCount(0);
+  await expect(taskIn(page, 'Todo', 'R4')).toHaveCount(1);
+  await page.keyboard.press('Enter');
+  await expectCounts(page, { Todo: 0, Doing: 0, Done: 0 });
+  await expect(page.getByRole('heading', { name: 'Todo' })).toBeFocused();
+  await expectNoRemovalMessage(page);
 });
