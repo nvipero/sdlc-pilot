@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addTask, dropTask, moveTask, removeTask, renameTask, restoreTask, type Task } from '../../src/tasks';
+import { addTask, dropTask, focusAfterRemoval, moveTask, removeTask, renameTask, type Task } from '../../src/tasks';
 
 describe('addTask', () => {
   it('adds a task in Todo with a trimmed title', () => {
@@ -38,44 +38,43 @@ describe('removeTask', () => {
     { id: 'c', title: 'Same', status: 'Todo' },
   ];
 
-  it('removes only the task with the given id and reports it with its index', () => {
-    expect(removeTask(tasks, 'b')).toEqual({
-      tasks: [
-        { id: 'a', title: 'One', status: 'Todo' },
-        { id: 'c', title: 'Same', status: 'Todo' },
-      ],
-      removed: { task: { id: 'b', title: 'Same', status: 'Doing' }, index: 1 },
-    });
+  it('removes only the task with the given id', () => {
+    expect(removeTask(tasks, 'b')).toEqual([
+      { id: 'a', title: 'One', status: 'Todo' },
+      { id: 'c', title: 'Same', status: 'Todo' },
+    ]);
   });
 
-  it('returns the same array and no removed task for an unknown id', () => {
-    const result = removeTask(tasks, 'x');
-    expect(result.tasks).toBe(tasks);
-    expect(result.removed).toBeNull();
+  it('returns the same array for an unknown id', () => {
+    expect(removeTask(tasks, 'x')).toBe(tasks);
   });
 });
 
-describe('restoreTask', () => {
+describe('focusAfterRemoval', () => {
   const tasks: Task[] = [
     { id: 'a', title: 'One', status: 'Todo' },
+    { id: 'x', title: 'Other', status: 'Doing' },
     { id: 'b', title: 'Two', status: 'Todo' },
-    { id: 'c', title: 'Three', status: 'Doing' },
+    { id: 'y', title: 'Alone', status: 'Done' },
+    { id: 'c', title: 'Three', status: 'Todo' },
   ];
 
-  it('puts a removed task back where it was', () => {
-    for (const id of ['a', 'b', 'c']) {
-      const { tasks: rest, removed } = removeTask(tasks, id);
-      expect(restoreTask(rest, removed!)).toEqual(tasks);
-    }
+  it('picks the next task in the same swimlane, skipping other swimlanes', () => {
+    expect(focusAfterRemoval(tasks, 'a')).toEqual({ removeOf: 'b' });
+    expect(focusAfterRemoval(tasks, 'b')).toEqual({ removeOf: 'c' });
   });
 
-  it('appends the task when its index is past the end', () => {
-    const task: Task = { id: 'z', title: 'Late', status: 'Done' };
-    expect(restoreTask([], { task, index: 5 })).toEqual([task]);
+  it('picks the previous task in the same swimlane when the removed task is the last one', () => {
+    expect(focusAfterRemoval(tasks, 'c')).toEqual({ removeOf: 'b' });
   });
 
-  it('returns the same array when the task is already present', () => {
-    expect(restoreTask(tasks, { task: tasks[1], index: 0 })).toBe(tasks);
+  it('picks the swimlane heading when the swimlane becomes empty', () => {
+    expect(focusAfterRemoval(tasks, 'x')).toEqual({ heading: 'Doing' });
+    expect(focusAfterRemoval(tasks, 'y')).toEqual({ heading: 'Done' });
+  });
+
+  it('returns null for an unknown id', () => {
+    expect(focusAfterRemoval(tasks, 'nope')).toBeNull();
   });
 });
 

@@ -1,9 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
-import { STATUSES, addTask, dropTask, moveTask, removeTask, renameTask, restoreTask, type RemovedTask, type Status, type Task } from './tasks';
+import { STATUSES, addTask, dropTask, focusAfterRemoval, moveTask, removeTask, renameTask, type FocusTarget, type Status, type Task } from './tasks';
 import { loadTasks, openStorage, saveTasks } from './storage';
-
-/** How long Undo is offered after a removal. */
-const UNDO_WINDOW_MS = 5000;
 
 /** How far (in pixels) the pointer must move while pressed before a press becomes a drag. */
 const DRAG_THRESHOLD_PX = 4;
@@ -25,15 +22,12 @@ export function App() {
   // Accessing window.localStorage throws when the browser blocks the page from storing data.
   const [storage] = useState(() => openStorage(() => window.localStorage));
   const [tasks, setTasks] = useState<Task[]>(() => loadTasks(storage));
-  // True while the last save failed. Every change (add, move, remove, Undo) saves the whole list,
+  // True while the last save failed. Every change (add, move, rename, remove) saves the whole list,
   // so a later successful save also stores what was not saved before.
   const [saveFailed, setSaveFailed] = useState(storage === null);
   const [title, setTitle] = useState('');
-  // The last removal while Undo is offered. The removal is saved at once, so it is final
-  // when the window ends, another task is removed, or the page is closed or reloaded.
-  const [pending, setPending] = useState<RemovedTask | null>(null);
-  const [focusRemoveOf, setFocusRemoveOf] = useState<string | null>(null);
-  const undoRef = useRef<HTMLButtonElement>(null);
+  // Where focus goes once a removal has been rendered.
+  const [focusAfterRemove, setFocusAfterRemove] = useState<FocusTarget | null>(null);
   const headingRefs = useRef(new Map<Status, HTMLHeadingElement>());
   const removeRefs = useRef(new Map<string, HTMLButtonElement>());
   // A pressed task that has not moved far enough yet to count as a drag.
@@ -90,22 +84,11 @@ export function App() {
   }, [storage, tasks]);
 
   useEffect(() => {
-    if (pending === null) return;
-    undoRef.current?.focus();
-    const timer = window.setTimeout(() => {
-      if (document.activeElement === undoRef.current) {
-        headingRefs.current.get(pending.task.status)?.focus();
-      }
-      setPending(null);
-    }, UNDO_WINDOW_MS);
-    return () => window.clearTimeout(timer);
-  }, [pending]);
-
-  useEffect(() => {
-    if (focusRemoveOf === null) return;
-    removeRefs.current.get(focusRemoveOf)?.focus();
-    setFocusRemoveOf(null);
-  }, [focusRemoveOf]);
+    if (focusAfterRemove === null) return;
+    if ('removeOf' in focusAfterRemove) removeRefs.current.get(focusAfterRemove.removeOf)?.focus();
+    else headingRefs.current.get(focusAfterRemove.heading)?.focus();
+    setFocusAfterRemove(null);
+  }, [focusAfterRemove]);
 
   useEffect(() => {
     if (focusEditOf === null) return;
@@ -171,18 +154,12 @@ export function App() {
     setTitle('');
   }
 
+  // Removal is final: no confirmation, no message and no Undo. It is saved like every other change.
   function handleRemove(id: string) {
-    const result = removeTask(tasks, id);
-    if (result.removed === null) return;
-    setTasks(result.tasks);
-    setPending(result.removed);
-  }
-
-  function handleUndo() {
-    if (pending === null) return;
-    setTasks((current) => restoreTask(current, pending));
-    setFocusRemoveOf(pending.task.id);
-    setPending(null);
+    const target = focusAfterRemoval(tasks, id);
+    if (target === null) return;
+    setTasks(removeTask(tasks, id));
+    setFocusAfterRemove(target);
   }
 
   return (
@@ -207,14 +184,6 @@ export function App() {
           Add task
         </button>
       </form>
-      <div className="removal">
-        <p role="status">{pending && `Removed “${pending.task.title}”.`}</p>
-        {pending && (
-          <button ref={undoRef} type="button" onClick={handleUndo}>
-            Undo
-          </button>
-        )}
-      </div>
       <div className="swimlanes">
         {STATUSES.map((status) => {
           const headingId = `lane-${status}`;
@@ -317,6 +286,8 @@ export function App() {
                     </li>
                   ))}
               </ul>
+              {/* Keeps the page text of neighbouring swimlanes apart ("Remove Doing", not "RemoveDoing"). */}
+              {' '}
             </section>
           );
         })}
