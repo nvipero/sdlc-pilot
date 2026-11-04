@@ -43,10 +43,12 @@ async function expectNowhere(page: Page, title: string) {
 }
 
 // No Undo and no message about the removal anywhere in the page.
+// One-shot checks (no retrying): call only after the removed task is gone,
+// so a message shown by the old behaviour is not waited out.
 async function expectNoRemovalMessage(page: Page) {
-  await expect(undo(page)).toHaveCount(0);
-  await expect(page.getByText(/removed/i)).toHaveCount(0);
-  await expect(message(page).filter({ hasText: /\S/ })).toHaveCount(0);
+  expect(await undo(page).count()).toBe(0);
+  expect(await page.getByText(/removed/i).count()).toBe(0);
+  expect(await message(page).filter({ hasText: /\S/ }).count()).toBe(0);
 }
 
 for (const status of STATUSES) {
@@ -109,6 +111,7 @@ test('no message or Undo appears during the 10 seconds after a removal or after 
   await addTask(page, 'Quiet');
   await addTask(page, 'Other');
   await removeButton(page, 'Todo', 'Quiet').click();
+  await expect(taskIn(page, 'Todo', 'Quiet')).toHaveCount(0);
   for (let i = 0; i < 10; i++) {
     await expectNoRemovalMessage(page);
     await page.waitForTimeout(1000);
@@ -186,7 +189,7 @@ test('a task is removed using only the keyboard, with Enter', { tag: '@issue-89-
   await addTask(page, 'Keys');
   await addTask(page, 'Other');
   await removeButton(page, 'Todo', 'Keys').focus();
-  await expect(removeButton(page, 'Todo', 'Keys')).toBeFocused();
+  await expect(removeButton(page, 'Todo', 'Keys')).toBeFocused({ timeout: 1000 });
   await page.keyboard.press('Enter');
   await expect(taskIn(page, 'Todo', 'Keys')).toHaveCount(0);
   await expect(taskIn(page, 'Todo', 'Other')).toHaveCount(1);
@@ -208,7 +211,7 @@ test('the remove action can be reached with Tab alone', { tag: '@issue-89-ac-5' 
   for (let i = 0; i < 20 && !(await target.evaluate((el) => el === document.activeElement)); i++) {
     await page.keyboard.press('Tab');
   }
-  await expect(target).toBeFocused();
+  await expect(target).toBeFocused({ timeout: 1000 });
   await page.keyboard.press('Enter');
   await expect(taskIn(page, 'Todo', 'Only')).toHaveCount(0);
 });
@@ -217,7 +220,7 @@ test('after removing a task, focus goes to the remove action of the next task in
   for (const t of ['A', 'B', 'C']) await addTask(page, t);
   await removeButton(page, 'Todo', 'B').click();
   await expect(taskIn(page, 'Todo', 'B')).toHaveCount(0);
-  await expect(removeButton(page, 'Todo', 'C')).toBeFocused();
+  await expect(removeButton(page, 'Todo', 'C')).toBeFocused({ timeout: 1000 });
 });
 
 test('after removing the first task, focus goes to the next one, also in Doing and Done', { tag: '@issue-89-ac-6' }, async ({ page }) => {
@@ -227,7 +230,7 @@ test('after removing the first task, focus goes to the next one, also in Doing a
     await moveTask(page, 'Todo', `${s}1`, s);
     await moveTask(page, 'Todo', `${s}2`, s);
     await removeButton(page, s, `${s}1`).click();
-    await expect(removeButton(page, s, `${s}2`)).toBeFocused();
+    await expect(removeButton(page, s, `${s}2`)).toBeFocused({ timeout: 1000 });
   }
 });
 
@@ -235,7 +238,7 @@ test('after removing the last task of a swimlane, focus goes to the previous tas
   for (const t of ['A', 'B', 'C']) await addTask(page, t);
   await removeButton(page, 'Todo', 'C').click();
   await expect(taskIn(page, 'Todo', 'C')).toHaveCount(0);
-  await expect(removeButton(page, 'Todo', 'B')).toBeFocused();
+  await expect(removeButton(page, 'Todo', 'B')).toBeFocused({ timeout: 1000 });
 });
 
 for (const status of STATUSES) {
@@ -244,7 +247,7 @@ for (const status of STATUSES) {
     if (status !== 'Todo') await moveTask(page, 'Todo', 'Lonely', status);
     await removeButton(page, status, 'Lonely').click();
     await expect(taskIn(page, status, 'Lonely')).toHaveCount(0);
-    await expect(page.getByRole('heading', { name: status })).toBeFocused();
+    await expect(page.getByRole('heading', { name: status })).toBeFocused({ timeout: 1000 });
   });
 }
 
@@ -253,7 +256,7 @@ test('focus stays in the swimlane of the removed task', { tag: '@issue-89-ac-6' 
   await addTask(page, 'Right');
   await moveTask(page, 'Todo', 'Right', 'Doing');
   await removeButton(page, 'Todo', 'Left').click();
-  await expect(page.getByRole('heading', { name: 'Todo' })).toBeFocused();
+  await expect(page.getByRole('heading', { name: 'Todo' })).toBeFocused({ timeout: 1000 });
 });
 
 test('pressing Enter repeatedly removes the tasks of a swimlane one after another', { tag: '@issue-89-ac-7' }, async ({ page }) => {
@@ -268,6 +271,6 @@ test('pressing Enter repeatedly removes the tasks of a swimlane one after anothe
   await expect(taskIn(page, 'Todo', 'R4')).toHaveCount(1);
   await page.keyboard.press('Enter');
   await expectCounts(page, { Todo: 0, Doing: 0, Done: 0 });
-  await expect(page.getByRole('heading', { name: 'Todo' })).toBeFocused();
+  await expect(page.getByRole('heading', { name: 'Todo' })).toBeFocused({ timeout: 1000 });
   await expectNoRemovalMessage(page);
 });
