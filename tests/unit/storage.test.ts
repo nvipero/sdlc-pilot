@@ -101,3 +101,25 @@ describe('storage that cannot be used', () => {
     expect(loadTasks(storage)).toEqual(tasks);
   });
 });
+
+describe('stored deadlines', () => {
+  it('round-trips a task with a deadline', () => {
+    const storage = memoryStorage();
+    const tasks: Task[] = [{ id: 'a', title: 'One', status: 'Todo', deadline: '2026-11-05' }];
+    saveTasks(storage, tasks);
+    expect(loadTasks(storage)).toEqual(tasks);
+  });
+
+  it('keeps a task but drops a malformed deadline', () => {
+    const raw = JSON.stringify([
+      { id: 'a', title: 'One', status: 'Todo', deadline: 'soon' },
+      { id: 'b', title: 'Two', status: 'Todo', deadline: 20261105 },
+      { id: 'c', title: 'Three', status: 'Todo', deadline: '2026-02-30' },
+    ]);
+    expect(loadTasks(memoryStorage({ [STORAGE_KEY]: raw }))).toEqual([
+      { id: 'a', title: 'One', status: 'Todo' },
+      { id: 'b', title: 'Two', status: 'Todo' },
+      { id: 'c', title: 'Three', status: 'Todo' },
+    ]);
+  });
+});

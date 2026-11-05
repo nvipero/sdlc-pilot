@@ -47,3 +47,16 @@ body {
   clip-path: inset(50%);
   white-space: nowrap;
 }
+
+.task .late {
+  color: #b00020;
+}
+
+/*
+ * Chromium makes the date field's calendar button a separate Tab stop inside the field, which leaves
+ * keyboard focus in the field without the field itself counting as focused. The button is hidden;
+ * the date is typed, and a click on the field opens the calendar (see App.tsx).
+ */
+.task input[type='date']::-webkit-calendar-picker-indicator {
+  display: none;
+}

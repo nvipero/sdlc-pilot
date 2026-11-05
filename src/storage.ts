@@ -1,4 +1,4 @@
-import { STATUSES, type Task } from './tasks';
+import { STATUSES, parseDeadline, type Task } from './tasks';
 
 export const STORAGE_KEY = 'tasks';
 
@@ -25,14 +25,23 @@ export function openStorage<S>(getStorage: () => S): S | null {
   }
 }
 
-/** Reads stored tasks; missing, unreadable or malformed data yields an empty list. */
+/** Keeps a stored task's own fields; a malformed deadline is dropped and the task is kept. */
+function toTask({ id, title, status, deadline }: Task): Task {
+  const parsed = parseDeadline(deadline);
+  return parsed === null ? { id, title, status } : { id, title, status, deadline: parsed };
+}
+
+/**
+ * Reads stored tasks; missing, unreadable or malformed data yields an empty list.
+ * Tasks stored before deadlines existed have none.
+ */
 export function loadTasks(storage: Pick<Storage, 'getItem'> | null): Task[] {
   if (storage === null) return [];
   try {
     const raw = storage.getItem(STORAGE_KEY);
     if (raw === null) return [];
     const parsed: unknown = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.filter(isTask) : [];
+    return Array.isArray(parsed) ? parsed.filter(isTask).map(toTask) : [];
   } catch {
     return [];
   }
