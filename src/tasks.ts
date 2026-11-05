@@ -34,27 +34,28 @@ export function dropTask(tasks: Task[], id: string, target: Status | null): Task
   return moveTask(tasks, id, target);
 }
 
-/** A removed task and its index in the task list, so Undo can put it back where it was. */
-export interface RemovedTask {
-  task: Task;
-  index: number;
+/** Removes the task with the given id for good. Returns the same array for an unknown id. */
+export function removeTask(tasks: Task[], id: string): Task[] {
+  const index = tasks.findIndex((task) => task.id === id);
+  if (index === -1) return tasks;
+  return [...tasks.slice(0, index), ...tasks.slice(index + 1)];
 }
 
-/** Removes the task with the given id. Returns the same array and `removed: null` for an unknown id. */
-export function removeTask(tasks: Task[], id: string): { tasks: Task[]; removed: RemovedTask | null } {
-  const index = tasks.findIndex((task) => task.id === id);
-  if (index === -1) return { tasks, removed: null };
-  return { tasks: [...tasks.slice(0, index), ...tasks.slice(index + 1)], removed: { task: tasks[index], index } };
-}
+/** Where keyboard focus goes after a removal: another task's remove action, or a swimlane heading. */
+export type FocusTarget = { removeOf: string } | { heading: Status };
 
 /**
- * Puts a removed task back at its index (or at the end if the list has become shorter).
- * Returns the same array when a task with that id is already present.
+ * Decides, from the list before the removal, where focus goes when the task with the given id is
+ * removed: the next task in its swimlane, else the previous one, else the swimlane's heading.
+ * Returns null for an unknown id.
  */
-export function restoreTask(tasks: Task[], { task, index }: RemovedTask): Task[] {
-  if (tasks.some((t) => t.id === task.id)) return tasks;
-  const at = Math.min(index, tasks.length);
-  return [...tasks.slice(0, at), task, ...tasks.slice(at)];
+export function focusAfterRemoval(tasks: Task[], id: string): FocusTarget | null {
+  const task = tasks.find((t) => t.id === id);
+  if (task === undefined) return null;
+  const lane = tasks.filter((t) => t.status === task.status);
+  const at = lane.indexOf(task);
+  const neighbour = lane[at + 1] ?? lane[at - 1];
+  return neighbour === undefined ? { heading: task.status } : { removeOf: neighbour.id };
 }
 
 /**
