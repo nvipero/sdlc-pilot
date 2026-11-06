@@ -8,3 +8,4 @@
 | Doing | Status of a task that is in progress (owner). | |
 | Done | Status of a task that is finished (owner). | Deleted. Whether tasks can be deleted is an open question. |
 | Swimlane | The area of the view that shows all tasks with one status. There is one swimlane per status (owner). | Kanban swimlanes as horizontal rows grouping cards by another dimension (unconfirmed: from model knowledge, not checked). |
+
