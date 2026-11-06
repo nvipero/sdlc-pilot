@@ -1,9 +1,37 @@
-import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
-import { STATUSES, addTask, dropTask, focusAfterRemoval, moveTask, removeTask, renameTask, type FocusTarget, type Status, type Task } from './tasks';
+import { useEffect, useRef, useState, type FocusEvent, type FormEvent, type KeyboardEvent } from 'react';
+import {
+  STATUSES,
+  addTask,
+  dropTask,
+  focusAfterRemoval,
+  formatDeadline,
+  isLate,
+  localDate,
+  moveTask,
+  removeTask,
+  renameTask,
+  setDeadline,
+  type FocusTarget,
+  type Status,
+  type Task,
+} from './tasks';
 import { loadTasks, openStorage, saveTasks } from './storage';
 
 /** How far (in pixels) the pointer must move while pressed before a press becomes a drag. */
 const DRAG_THRESHOLD_PX = 4;
+
+/** How often today's date is re-read, so a task turns late within a minute after midnight. */
+const TODAY_CHECK_MS = 30_000;
+
+/** Which field of a task is being edited. */
+type EditKind = 'title' | 'deadline';
+
+/** A task's field being edited, with the text in it. */
+interface Editing {
+  kind: EditKind;
+  id: string;
+  draft: string;
+}
 
 /** A task being dragged, and the swimlane under the pointer (null when over no swimlane). */
 interface Drag {
@@ -34,11 +62,16 @@ export function App() {
   const pressRef = useRef<{ id: string; from: Status; x: number; y: number } | null>(null);
   const [drag, setDrag] = useState<Drag | null>(null);
   const dragRef = useRef<Drag | null>(null);
-  // The task whose title is being edited, with the text in its field. Only one task at a time.
-  const [editing, setEditing] = useState<{ id: string; draft: string } | null>(null);
+  // The task whose title or deadline is being edited, with the text in its field.
+  // Only one field (title or deadline) is shown at a time.
+  const [editing, setEditing] = useState<Editing | null>(null);
   const editFormRef = useRef<HTMLFormElement>(null);
   const editRefs = useRef(new Map<string, HTMLButtonElement>());
-  const [focusEditOf, setFocusEditOf] = useState<string | null>(null);
+  const deadlineRefs = useRef(new Map<string, HTMLButtonElement>());
+  // The action that gets focus back once an edit has ended.
+  const [focusAfterEdit, setFocusAfterEdit] = useState<{ kind: EditKind; id: string } | null>(null);
+  // Today's date in local time, re-read on a timer so a deadline turns late after midnight.
+  const [today, setToday] = useState(() => localDate(new Date()));
   const pointerDownRef = useRef(false);
   const pressedOutsideRef = useRef(false);
 
@@ -91,10 +124,16 @@ export function App() {
   }, [focusAfterRemove]);
 
   useEffect(() => {
-    if (focusEditOf === null) return;
-    editRefs.current.get(focusEditOf)?.focus();
-    setFocusEditOf(null);
-  }, [focusEditOf]);
+    if (focusAfterEdit === null) return;
+    const refs = focusAfterEdit.kind === 'title' ? editRefs : deadlineRefs;
+    refs.current.get(focusAfterEdit.id)?.focus();
+    setFocusAfterEdit(null);
+  }, [focusAfterEdit]);
+
+  useEffect(() => {
+    const timer = setInterval(() => setToday(localDate(new Date())), TODAY_CHECK_MS);
+    return () => clearInterval(timer);
+  }, []);
 
   // A click whose press started outside the edit's field, Save and Cancel cancels the edit, and the
   // click then does what it would do anyway. A press that starts in the field and ends elsewhere is
@@ -102,7 +141,7 @@ export function App() {
   // pointer before the click lands.
   useEffect(() => {
     if (editing === null) return;
-    const id = editing.id;
+    const { kind, id } = editing;
     pointerDownRef.current = false;
     pressedOutsideRef.current = false;
     function handlePointerDown(event: PointerEvent) {
@@ -113,7 +152,9 @@ export function App() {
       pointerDownRef.current = false;
     }
     function handleClick() {
-      if (pressedOutsideRef.current) setEditing((current) => (current?.id === id ? null : current));
+      if (pressedOutsideRef.current) {
+        setEditing((current) => (current?.kind === kind && current.id === id ? null : current));
+      }
       pressedOutsideRef.current = false;
     }
     document.addEventListener('pointerdown', handlePointerDown, true);
@@ -124,26 +165,40 @@ export function App() {
       document.removeEventListener('pointerup', handlePointerUp, true);
       document.removeEventListener('click', handleClick, true);
     };
-  }, [editing?.id]);
+  }, [editing?.kind, editing?.id]);
 
-  function endEdit(id: string) {
+  function endEdit(kind: EditKind, id: string) {
     setEditing(null);
-    setFocusEditOf(id);
+    setFocusAfterEdit({ kind, id });
   }
 
   function handleEditSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (editing === null) return;
+    const { kind, id, draft } = editing;
     // An empty or whitespace-only title is not saved: renameTask leaves the list as it is,
-    // and the edit ends as if it was cancelled.
-    setTasks((current) => renameTask(current, editing.id, editing.draft));
-    endEdit(editing.id);
+    // and the edit ends as if it was cancelled. An empty or incomplete date removes the deadline.
+    setTasks((current) => (kind === 'title' ? renameTask(current, id, draft) : setDeadline(current, id, draft)));
+    endEdit(kind, id);
+  }
+
+  function handleClearDeadline(id: string) {
+    setTasks((current) => setDeadline(current, id, ''));
+    endEdit('deadline', id);
   }
 
   function handleEditKeyDown(event: KeyboardEvent<HTMLFormElement>) {
     if (event.key !== 'Escape' || editing === null) return;
     event.preventDefault();
-    endEdit(editing.id);
+    endEdit(editing.kind, editing.id);
+  }
+
+  // Moving focus with Tab out of the field and its actions cancels the edit, as a click outside does.
+  // Focus moved by a pointer press is left to the click.
+  function handleEditBlur(event: FocusEvent<HTMLFormElement>) {
+    const next = event.relatedTarget;
+    if (pointerDownRef.current || next === null || event.currentTarget.contains(next)) return;
+    setEditing(null);
   }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -218,19 +273,14 @@ export function App() {
                         pressRef.current = { id: task.id, from: status, x: event.clientX, y: event.clientY };
                       }}
                     >
-                      {editing?.id === task.id ? (
+                      {editing?.kind === 'title' && editing.id === task.id ? (
                         <form
                           ref={editFormRef}
                           className="edit"
+                          noValidate
                           onSubmit={handleEditSubmit}
                           onKeyDown={handleEditKeyDown}
-                          onBlur={(event) => {
-                            // Moving focus with Tab out of the field, Save and Cancel cancels the edit,
-                            // as a click outside does. Focus moved by a pointer press is left to the click.
-                            const next = event.relatedTarget;
-                            if (pointerDownRef.current || next === null || event.currentTarget.contains(next)) return;
-                            setEditing(null);
-                          }}
+                          onBlur={handleEditBlur}
                         >
                           <label htmlFor={`edit-title-${task.id}`} className="visually-hidden">
                             Title
@@ -240,10 +290,10 @@ export function App() {
                             type="text"
                             autoFocus
                             value={editing.draft}
-                            onChange={(event) => setEditing({ id: task.id, draft: event.target.value })}
+                            onChange={(event) => setEditing({ kind: 'title', id: task.id, draft: event.target.value })}
                           />
                           <button type="submit">Save</button>
-                          <button type="button" onClick={() => endEdit(task.id)}>
+                          <button type="button" onClick={() => endEdit('title', task.id)}>
                             Cancel
                           </button>
                         </form>
@@ -257,9 +307,65 @@ export function App() {
                               if (el) editRefs.current.set(task.id, el);
                               else editRefs.current.delete(task.id);
                             }}
-                            onClick={() => setEditing({ id: task.id, draft: task.title })}
+                            onClick={() => setEditing({ kind: 'title', id: task.id, draft: task.title })}
                           >
                             Edit
+                          </button>
+                        </>
+                      )}{' '}
+                      {editing?.kind === 'deadline' && editing.id === task.id ? (
+                        <form
+                          ref={editFormRef}
+                          className="edit"
+                          noValidate
+                          onSubmit={handleEditSubmit}
+                          onKeyDown={handleEditKeyDown}
+                          onBlur={handleEditBlur}
+                        >
+                          <label htmlFor={`edit-deadline-${task.id}`} className="visually-hidden">
+                            Deadline
+                          </label>
+                          <input
+                            id={`edit-deadline-${task.id}`}
+                            type="date"
+                            autoFocus
+                            onClick={(event) => {
+                              // The calendar button is hidden (see index.css), so a click opens the calendar.
+                              // showPicker throws where the browser does not allow it; typing still works.
+                              try {
+                                event.currentTarget.showPicker();
+                              } catch {
+                                // Typing the date is still possible.
+                              }
+                            }}
+                            value={editing.draft}
+                            onChange={(event) => setEditing({ kind: 'deadline', id: task.id, draft: event.target.value })}
+                          />
+                          <button type="submit">Save</button>
+                          <button type="button" onClick={() => endEdit('deadline', task.id)}>
+                            Cancel
+                          </button>
+                          {task.deadline !== undefined && (
+                            <button type="button" onClick={() => handleClearDeadline(task.id)}>
+                              Clear deadline
+                            </button>
+                          )}
+                        </form>
+                      ) : (
+                        <>
+                          {task.deadline !== undefined && <span className="due">Due {formatDeadline(task.deadline)}</span>}{' '}
+                          {/* Late is marked with text, so it does not rely on colour alone. */}
+                          {isLate(task, today) && <strong className="late">Late</strong>}{' '}
+                          <button
+                            type="button"
+                            aria-label={`Deadline for ${task.title}`}
+                            ref={(el) => {
+                              if (el) deadlineRefs.current.set(task.id, el);
+                              else deadlineRefs.current.delete(task.id);
+                            }}
+                            onClick={() => setEditing({ kind: 'deadline', id: task.id, draft: task.deadline ?? '' })}
+                          >
+                            Deadline
                           </button>
                         </>
                       )}
