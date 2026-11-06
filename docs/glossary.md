@@ -7,4 +7,6 @@
 | Todo | Status of a task that is not started (owner). | |
 | Doing | Status of a task that is in progress (owner). | |
 | Done | Status of a task that is finished (owner). | Deleted. Whether tasks can be deleted is an open question. |
+| Deadline (fi: määräaika) | When a task should be done by; whether it is a date only or also a time of day is an open question. A task has one deadline or none (owner). | A reminder or notification. Those are non-goals (owner). |
+| Late (fi: myöhässä) | A task whose deadline has passed (owner). | |
 | Swimlane | The area of the view that shows all tasks with one status. There is one swimlane per status (owner). | Kanban swimlanes as horizontal rows grouping cards by another dimension (unconfirmed: from model knowledge, not checked). |

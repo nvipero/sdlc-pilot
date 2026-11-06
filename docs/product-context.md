@@ -8,6 +8,7 @@ It has a single user, the owner, so there is no user management, and data stays 
 - It is used in a web browser and must look clean (owner).
 - A task has one of three statuses: Todo, Doing or Done (owner).
 - Tasks are shown in swimlanes, one swimlane per status, and each task appears in the swimlane of its current status (owner).
+- A task can have a deadline, which the user can set, change and remove, and a task whose deadline has passed is shown as late (owner).
 
 ## Users
 - The owner is the only user (owner).
@@ -27,7 +28,7 @@ It has a single user, the owner, so there is no user management, and data stays 
 - Syncing between devices (owner).
 - A mobile (native) app. The app runs in the browser only (owner).
 - Sharing or collaboration (owner).
-- Reminders, notifications and deadlines (owner).
+- Reminders and notifications (owner).
 
 ## Practices and standards
 - WCAG 2.2 success criterion 1.4.3 requires a contrast ratio of at least 4.5:1 for normal text and 3:1 for large-scale text (standard: https://w3c.github.io/wcag/guidelines/22/, read 2026-10-23; this is the W3C Editor's Draft, not the published Recommendation, which could not be reached).
@@ -42,4 +43,6 @@ It has a single user, the owner, so there is no user management, and data stays 
 - What should the app do when browser storage is unavailable or blocked, for example a `SecurityError` or private browsing? (why it matters: otherwise tasks could disappear without the user being told)
 - Besides a title and a status, what does a task contain, and can a task be edited or deleted? (why it matters: "add" and "change status" are the only confirmed operations)
 - Can a task move between any two statuses, or only forward (Todo → Doing → Done)? (why it matters: it decides the allowed status transitions in specs and tests)
+- Is a deadline a date only, or a date and a time of day? (why it matters: it decides when exactly a task becomes late)
+- Can a task in Done be late? (why it matters: it decides whether finished tasks are marked late)
 - Which browsers must be supported? (why it matters: it limits which browser APIs specs may assume)
