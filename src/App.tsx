@@ -16,6 +16,7 @@ import {
   type Task,
 } from './tasks';
 import { loadTasks, openStorage, saveTasks } from './storage';
+import { PrivateNotes } from './PrivateNotes';
 
 /** How far (in pixels) the pointer must move while pressed before a press becomes a drag. */
 const DRAG_THRESHOLD_PX = 4;
@@ -398,6 +399,7 @@ export function App() {
           );
         })}
       </div>
+      <PrivateNotes />
     </main>
   );
 }

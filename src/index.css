@@ -60,3 +60,17 @@ body {
 .task input[type='date']::-webkit-calendar-picker-indicator {
   display: none;
 }
+
+.private-notes {
+  margin-top: 1rem;
+}
+
+.auth-error {
+  border: 2px solid #b00020;
+  padding: 0.5rem;
+}
+
+/* An empty list keeps its place on the page, so "Notes" is shown even before the first note. */
+.notes {
+  min-height: 1.5em;
+}
