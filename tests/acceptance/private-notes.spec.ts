@@ -1,4 +1,4 @@
-import { test, expect, type Page, type Browser } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 
 const PASSWORD = 'Str0ng!Passw0rd#';
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL ?? '';
@@ -57,9 +57,15 @@ async function addNote(page: Page, text: string) {
   await addNoteButton(page).click();
 }
 
+const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+// A regular expression is matched against the raw text; a string would be trimmed and have its
+// white space collapsed first, which would hide missing trimming.
 async function expectNotes(page: Page, texts: string[]) {
   await expect(noteItems(page)).toHaveCount(texts.length);
-  for (let i = 0; i < texts.length; i++) await expect(noteItems(page).nth(i)).toHaveText(texts[i]);
+  for (let i = 0; i < texts.length; i++) {
+    await expect(noteItems(page).nth(i)).toHaveText(new RegExp(`^${escapeRegExp(texts[i])}$`));
+  }
 }
 
 async function expectSignedOutView(page: Page) {
@@ -137,6 +143,8 @@ test('signing in with an existing account shows its notes', { tag: '@issue-106-a
   await expect(noteField(page)).toBeVisible();
   await expect(addNoteButton(page)).toBeVisible();
   await expectNotes(page, ['First', 'Second']);
+  expect(await signUpButton(page).count()).toBe(0);
+  expect(await passwordField(page).count()).toBe(0);
 });
 
 test('signing in with a wrong password shows an error and does not sign in', { tag: '@issue-106-ac-5' }, async ({ page }) => {
@@ -210,6 +218,8 @@ test('signing out shows the signed-out view with no notes, also after a reload',
   expect(await page.getByText('Private one').count()).toBe(0);
   await page.reload();
   await expect(signInButton(page)).toBeVisible();
+  // Let the app finish restoring a stored session before the one-shot absence checks.
+  await page.waitForLoadState('networkidle');
   await expectSignedOutView(page);
   expect(await page.getByText('Private one').count()).toBe(0);
   expect(await signedInText(page, email).count()).toBe(0);
@@ -238,7 +248,9 @@ test('the same account in a different browser shows the same notes in the same o
   }
 });
 
-async function ownNotesReadRequests(page: Page, browser: Browser, email: string, marker: string) {
+// Expectation: the app reads the notes from the REST API with a GET under /rest/v1/ (the response
+// body holds the marker). A read through an RPC or an Edge Function is not found and the poll fails.
+async function ownNotesReadRequests(page: Page, email: string, marker: string) {
   // Reload the signed-in page and record the app's own database reads (GET under /rest/v1/).
   const urls: string[] = [];
   page.on('response', async (res) => {
@@ -281,10 +293,10 @@ test('another account sees only its own notes in the same browser and in another
   }
 });
 
-test('the database returns none of the first account\'s notes to another account or to no sign-in', { tag: '@issue-106-ac-13' }, async ({ page, browser }) => {
+test('the database returns none of the first account\'s notes to another account or to no sign-in', { tag: '@issue-106-ac-13' }, async ({ page }) => {
   const marker = `secret-${crypto.randomUUID()}`;
   const email1 = await signedInUserWithNotes(page, [`${marker} one`, `${marker} two`]);
-  const readUrls = await ownNotesReadRequests(page, browser, email1, marker);
+  const readUrls = await ownNotesReadRequests(page, email1, marker);
 
   const email2 = uniqueEmail();
   await createUserViaApi(email2);
@@ -313,12 +325,21 @@ test('signing up, in and out and adding notes leave the tasks on the board uncha
   };
   await addTask('Task one');
   await addTask('Task two');
+  await addTask('Task four');
+  await lane('Todo').getByRole('listitem').filter({ hasText: 'Task one' })
+    .getByRole('button', { name: /deadline.*Task one|Task one.*deadline/i }).click();
+  await page.getByLabel('Deadline', { exact: true }).fill('2026-12-24');
+  await page.getByRole('button', { name: /Save/ }).click();
+  await expect(lane('Todo').getByRole('listitem').filter({ hasText: 'Task one' }).getByText(/\bDue\b/)).toHaveCount(1);
   await lane('Todo').getByRole('listitem').filter({ hasText: 'Task two' }).getByRole('button', { name: 'Move to Doing' }).click();
   await expect(lane('Doing').getByRole('listitem').filter({ hasText: 'Task two' })).toHaveCount(1);
 
   const expectBoard = async () => {
-    await expect(lane('Todo').getByRole('listitem')).toHaveCount(1);
+    await expect(lane('Todo').getByRole('listitem')).toHaveCount(2);
     await expect(lane('Todo').getByRole('listitem').first()).toContainText('Task one');
+    await expect(lane('Todo').getByRole('listitem').first()).toContainText('Due 24 Dec 2026');
+    await expect(lane('Todo').getByRole('listitem').nth(1)).toContainText('Task four');
+    await expect(lane('Todo').getByRole('listitem').nth(1).getByText(/\bDue\b/)).toHaveCount(0);
     await expect(lane('Doing').getByRole('listitem')).toHaveCount(1);
     await expect(lane('Doing').getByRole('listitem').first()).toContainText('Task two');
     await expect(lane('Done').getByRole('listitem')).toHaveCount(0);
