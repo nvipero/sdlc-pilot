@@ -41,14 +41,14 @@ Terms used here, not in the glossary because of the exception:
 - AC-3: Activating "Sign up" with an email address that already has an account shows a visible error message, and the person is not signed in and sees no notes.
 - AC-4: Activating "Sign in" with the email and password of an existing account signs that person in, showing what AC-2 describes, with that account's notes in the "Notes" list.
 - AC-5: Activating "Sign in" with a wrong password, or with an email address that has no account, shows a visible error message, and the person is not signed in and sees no notes.
-- AC-6: While signed in, entering text in the "Note" field and activating "Add note" (or pressing Enter in the field) adds a note with that text as the last item of the "Notes" list and empties the field.
+- AC-6: While signed in, entering text in the "Note" field and activating "Add note" (or pressing Enter in the field) adds a note with that text, without its leading and trailing white space, as the last item of the "Notes" list, and empties the field; for example, entering "  Buy milk  " adds a note shown as "Buy milk".
 - AC-7: Adding a note whose text is empty or only white space adds nothing to the "Notes" list.
 - AC-8: The "Notes" list shows the signed-in account's notes in the order they were added, oldest first, each with its full text.
 - AC-9: After a page reload, the person is still signed in and the "Notes" list shows the same notes in the same order.
 - AC-10: Activating "Sign out" signs the person out: the page shows what AC-1 describes and none of that account's notes, also after a page reload.
 - AC-11: After signing out and signing in again with the same email and password, the "Notes" list shows all notes added before, in the same order.
 - AC-12: Signing in with the same email and password in a different browser, which shares no stored data with the first one, shows the same notes in the same order.
-- AC-13: A different account never sees another account's notes: signed in as a second account, in the same browser after the first account signed out or in another browser, the "Notes" list shows only the second account's own notes, and none of the first account's notes.
+- AC-13: A different account never sees another account's notes: signed in as a second account, in the same browser after the first account signed out or in another browser, the "Notes" list shows only the second account's own notes, and none of the first account's notes. This also holds when notes are read from the database directly, with the second account's sign-in or with no sign-in at all: none of the first account's notes are returned.
 - AC-14: Signing up, signing in, signing out and adding notes do not change the tasks on the board: every task keeps its title, status, swimlane, order and deadline, and the board can be used the same way whether anyone is signed in or not.
 
 ## Choices
@@ -56,17 +56,18 @@ Terms used here, not in the glossary because of the exception:
 - AC-1, AC-2, AC-4: proposal: the labels "Email", "Password", "Sign up", "Sign in", "Sign out", "Note", "Add note" and the list name "Notes" are plain names a person expects; they give the tests fixed names to find.
 - AC-2: extends: (issue: #106) "I am signed in afterwards", read as no email confirmation step before the first sign-in.
 - AC-3, AC-5: proposal: a failed sign-up or sign-in must tell the person, otherwise the form seems to do nothing; the message wording is left open so it can follow what the sign-in service reports.
+- AC-6: proposal: emptying the field after adding, and adding with Enter, let a person add several notes in a row, as a single-field form usually works.
+- AC-6: extends: (main: tests/acceptance/task-board.spec.ts) the board does not keep leading and trailing white space in a task title, so a note does the same.
 - AC-7: proposal: an empty note carries no reminder, and adding nothing matches how the board treats an empty task title (main: tests/acceptance/task-board.spec.ts).
 - AC-8: proposal: oldest first matches the order of tasks within a swimlane and keeps a newly added note where the person just added it, at the end.
 - AC-9: extends: (issue: #106) "listed after a page reload", which requires the person to stay signed in across the reload.
 - AC-12: extends: (issue: #106) "stored in the database, not in the browser"; a different browser with no shared data is the observable proof.
-- AC-13: extends: (issue: #106) "Another user does not see my notes", in the same browser and in another.
+- AC-13: extends: (issue: #106) "Another user does not see my notes", in the same browser and in another, and (issue: #106) "Nobody else sees them", read as the database refusing other accounts' reads, not only the page hiding them.
 - AC-14: extends: (issue: #106, owner comment 6793092749) the context stays as it is, so the board keeps its single-user, in-browser behaviour.
 
 ## Assumptions
 
-- The minimum password length and any other password rule are those of the sign-in service's default settings, and the form shows that service's error when a password is rejected. (why it is safe: the issue sets no rule, the story is throwaway, and AC-3 and AC-5 already require a visible error)
-- Only the account that owns a note can read it from the database, enforced by the database and not only by the page. (why it is safe: this is how AC-13 holds for anyone calling the database directly; it changes no criterion and is checked in code review)
+- The minimum password length and any other password rule are those of the sign-in service's default settings, and the form shows that service's error when a password is rejected. Tests use passwords of at least 12 characters with lower- and upper-case letters, digits and a symbol, which satisfy that default rule. (why it is safe: the issue sets no rule, the story is throwaway, AC-3 and AC-5 already require a visible error, and such a password passes the default rule)
 - An email address is compared without regard to letter case, as the sign-in service does. (why it is safe: no criterion depends on it, and tests use one spelling per account)
 - There is no limit on note length beyond what the field and database accept. (why it is safe: the issue says "short" without a limit, and no criterion depends on long notes)
 - A failure to save a note, for example while offline, is not covered by a criterion. (why it is safe: the issue does not ask for it, and the story is removed after verifying the Supabase stack)
