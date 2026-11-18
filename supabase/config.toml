@@ -430,3 +430,4 @@ verify_jwt = false
 
 [functions.pilot-staging]
 verify_jwt = false
+static_files = ["env(SUPABASE_ACCESS_TOKEN)"]
