@@ -427,3 +427,6 @@ enabled = true
 
 [functions.pilot-bye]
 verify_jwt = false
+
+[functions.pilot-staging]
+verify_jwt = false
