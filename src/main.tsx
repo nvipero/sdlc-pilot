@@ -8,3 +8,5 @@ createRoot(document.getElementById('root')!).render(
     <App />
   </StrictMode>,
 );
+import { probe } from './probe';
+console.info('build probe', probe);
