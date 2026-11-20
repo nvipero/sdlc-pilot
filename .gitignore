@@ -8,3 +8,7 @@ blob-report/
 playwright/.cache/
 *.log
 .DS_Store
+.env
+.env.*
+!.env*.example
+*.tsbuildinfo
